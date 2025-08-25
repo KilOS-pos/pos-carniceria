@@ -1,9 +1,14 @@
-# Base de datos local
-db.sqlite3
+# Entornos virtuales
+/venv/
+/env/
 
-# Archivos temporales de Python
+# Archivos de Python
 __pycache__/
 *.pyc
 
-# Entorno Virtual (si tienes uno con este nombre)
-venv/
+# Base de datos local
+db.sqlite3
+*.sqlite3
+
+# Archivos del IDE
+.idea/
