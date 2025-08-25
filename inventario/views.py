@@ -6,13 +6,14 @@ from django.contrib.auth import login
 from django.contrib.auth.models import User
 from django.contrib.auth.decorators import login_required
 from django.db.models import Q, Sum
-from .models import Producto, Pedido, PedidoItem, Cliente, Retiro, Empresa, UserProfile
+from .models import Producto, Pedido, PedidoItem, Cliente, Retiro, Empresa, UserProfile, Arqueo
 from decimal import Decimal
 from django.db import transaction
 from django.utils import timezone
 from datetime import datetime, timedelta
-from .forms import RetiroForm, RegistroForm, ProductoForm
+from .forms import RetiroForm, RegistroForm, ProductoForm, ClienteForm
 from django.db.models.functions import TruncHour
+from .models import Arqueo
 
 # =================================================================================
 # VISTAS DE AUTENTICACIÓN Y PÁGINA PRINCIPAL
@@ -405,7 +406,6 @@ def arqueo_caja(request):
     empresa_del_usuario = request.user.profile.empresa
     hoy = timezone.localtime(timezone.now()).date()
     
-    # ... (toda la lógica de cálculo que ya tienes sigue igual)
     ventas_efectivo = Pedido.objects.filter(empresa=empresa_del_usuario, fecha__date=hoy, metodo_pago='Efectivo')
     total_efectivo = ventas_efectivo.aggregate(Sum('total'))['total__sum'] or Decimal('0.00')
     
@@ -418,10 +418,20 @@ def arqueo_caja(request):
     efectivo_esperado = total_efectivo - total_retiros
     total_ventas = total_efectivo + total_tarjeta
 
-    # Generamos el texto del ticket aquí mismo
-    texto_arqueo = _generar_texto_ticket_arqueo(
-        hoy, total_efectivo, total_tarjeta, total_ventas, total_retiros, efectivo_esperado, empresa=empresa_del_usuario
+    # Generamos un Arqueo "temporal" para la visualización del ticket.
+    # No lo guardamos en la base de datos, es solo para pasar datos.
+    arqueo_temporal = Arqueo(
+        empresa=empresa_del_usuario,
+        fecha=hoy,
+        ventas_efectivo=total_efectivo,
+        ventas_tarjeta=total_tarjeta,
+        retiros=total_retiros,
+        efectivo_esperado=efectivo_esperado,
+        monto_contado=Decimal('0.00'), # No hay monto contado todavía
+        diferencia=Decimal('0.00') # No hay diferencia todavía
     )
+    
+    texto_arqueo = _generar_texto_ticket_arqueo(arqueo_temporal)
     
     contexto = {
         'fecha': hoy,
@@ -430,7 +440,6 @@ def arqueo_caja(request):
         'total_ventas': total_ventas,
         'total_retiros': total_retiros,
         'efectivo_esperado': efectivo_esperado,
-        # Y lo pasamos a la plantilla como JSON
         'texto_arqueo_json': json.dumps(texto_arqueo),
     }
     return render(request, 'inventario/arqueo_caja.html', contexto)
@@ -554,23 +563,36 @@ def _generar_texto_ticket_retiro(retiro):
     
     return texto_ticket
 
-def _generar_texto_ticket_arqueo(fecha, total_efectivo, total_tarjeta, total_ventas, total_retiros, efectivo_esperado, empresa):
-    fecha_str = fecha.strftime('%d/%m/%Y')
+def _generar_texto_ticket_arqueo(arqueo):
+    empresa = arqueo.empresa
+    fecha_str = arqueo.fecha.strftime('%d/%m/%Y')
+    
+    # Manejamos el caso de que no haya un usuario asignado
+    cerrado_por_nombre = arqueo.cerrado_por.username if arqueo.cerrado_por else "No especificado"
     
     texto_ticket = f"{empresa.nombre.center(42)}\n"
-    texto_ticket += "ARQUEO DE CAJA\n".center(42)
+    texto_ticket += "COMPROBANTE DE CIERRE DE CAJA\n".center(42)
     texto_ticket += "=" * 42 + "\n"
     texto_ticket += f"FECHA: {fecha_str}\n"
+    # Usamos la nueva variable 'cerrado_por_nombre'
+    texto_ticket += f"CERRADO POR: {cerrado_por_nombre}\n"
     texto_ticket += "-" * 42 + "\n"
-    texto_ticket += f"{'VENTAS EN EFECTIVO:':>32} ${total_efectivo:.2f}\n"
-    texto_ticket += f"{'VENTAS CON TARJETA:':>32} ${total_tarjeta:.2f}\n"
-    texto_ticket += f"{'TOTAL DE VENTAS:':>32} ${total_ventas:.2f}\n"
+    texto_ticket += f"{'VENTAS EN EFECTIVO:':>32} ${arqueo.ventas_efectivo:.2f}\n"
+    texto_ticket += f"{'VENTAS CON TARJETA:':>32} ${arqueo.ventas_tarjeta:.2f}\n"
+    texto_ticket += f"{'TOTAL DE VENTAS:':>32} ${arqueo.ventas_efectivo + arqueo.ventas_tarjeta:.2f}\n"
     texto_ticket += "-" * 42 + "\n"
-    texto_ticket += f"{'TOTAL DE RETIROS:':>32} -${total_retiros:.2f}\n"
+    texto_ticket += f"{'TOTAL DE RETIROS:':>32} -${arqueo.retiros:.2f}\n"
     texto_ticket += "=" * 42 + "\n"
-    texto_ticket += f"{'EFECTIVO ESPERADO:':>32} ${efectivo_esperado:.2f}\n"
+    texto_ticket += f"{'EFECTIVO ESPERADO:':>32} ${arqueo.efectivo_esperado:.2f}\n"
+    texto_ticket += f"{'MONTO CONTADO:':>32} ${arqueo.monto_contado:.2f}\n"
+    
+    texto_ticket += "-" * 42 + "\n"
+    
+    diferencia_signo = "+" if arqueo.diferencia >= 0 else ""
+    texto_ticket += f"{'DIFERENCIA:':>32} {diferencia_signo}${arqueo.diferencia:.2f}\n"
+    
     texto_ticket += "=" * 42 + "\n"
-    texto_ticket += "\n"
+    texto_ticket += "FIRMA: __________________\n".center(42)
     texto_ticket += "\n"
     texto_ticket += "\n"
     texto_ticket += "\n"
@@ -578,7 +600,6 @@ def _generar_texto_ticket_arqueo(fecha, total_efectivo, total_tarjeta, total_ven
     texto_ticket += "\n"
     
     return texto_ticket
-
 
 @login_required
 def venta_exitosa(request, pedido_id):
@@ -607,3 +628,131 @@ def retiro_exitoso(request, retiro_id):
         'texto_del_ticket_json': json.dumps(texto_del_ticket),
     }
     return render(request, 'inventario/retiro_exitoso.html', contexto)
+
+@login_required
+@transaction.atomic
+def cerrar_caja(request):
+    empresa_del_usuario = request.user.profile.empresa
+    hoy = timezone.localtime(timezone.now()).date()
+
+    if request.method == 'POST':
+        monto_contado_str = request.POST.get('monto_contado')
+        try:
+            monto_contado = Decimal(monto_contado_str)
+        except (ValueError, TypeError):
+            messages.error(request, "Monto inválido. Por favor, ingresa un número válido.")
+            return redirect('arqueo-caja')
+
+        ventas_efectivo_hoy = Pedido.objects.filter(empresa=empresa_del_usuario, fecha__date=hoy, metodo_pago='Efectivo')
+        total_efectivo = ventas_efectivo_hoy.aggregate(Sum('total'))['total__sum'] or Decimal('0.00')
+        
+        ventas_tarjeta_hoy = Pedido.objects.filter(empresa=empresa_del_usuario, fecha__date=hoy, metodo_pago='Tarjeta')
+        total_tarjeta = ventas_tarjeta_hoy.aggregate(Sum('total'))['total__sum'] or Decimal('0.00')
+        
+        retiros_hoy = Retiro.objects.filter(empresa=empresa_del_usuario, fecha__date=hoy)
+        total_retiros = retiros_hoy.aggregate(Sum('monto'))['monto__sum'] or Decimal('0.00')
+
+        efectivo_esperado = total_efectivo - total_retiros
+        diferencia = monto_contado - efectivo_esperado
+
+        # Guardar el arqueo del día en la base de datos
+        arqueo = Arqueo.objects.create(
+            empresa=empresa_del_usuario,
+            fecha=hoy,
+            ventas_efectivo=total_efectivo,
+            ventas_tarjeta=total_tarjeta,
+            retiros=total_retiros,
+            efectivo_esperado=efectivo_esperado,
+            monto_contado=monto_contado,
+            diferencia=diferencia,
+            cerrado_por=request.user 
+        )
+
+        # Eliminar las ventas y retiros del día
+        ventas_tarjeta_hoy.delete()
+        ventas_efectivo_hoy.delete()
+        retiros_hoy.delete()
+        
+        messages.success(request, "Caja cerrada exitosamente. Se ha generado un comprobante de cierre.")
+
+        # Redirigir a la nueva página de éxito que activará la impresión
+        return redirect('cierre-caja-exitoso', arqueo_id=arqueo.id)
+
+    return redirect('arqueo-caja')
+
+@login_required
+def cierre_caja_exitoso(request, arqueo_id):
+    empresa_del_usuario = request.user.profile.empresa
+    arqueo = get_object_or_404(Arqueo, id=arqueo_id, empresa=empresa_del_usuario)
+
+    # Generamos el texto del ticket aquí para pasarlo a la plantilla
+    texto_del_ticket = _generar_texto_ticket_arqueo(arqueo)
+
+    contexto = {
+        'arqueo': arqueo,
+        'texto_arqueo_json': json.dumps(texto_del_ticket),
+    }
+    return render(request, 'inventario/cierre_caja_exitoso.html', contexto)
+
+@login_required
+def reporte_arqueos(request):
+    empresa_del_usuario = request.user.profile.empresa
+    arqueos = Arqueo.objects.filter(empresa=empresa_del_usuario).order_by('-fecha')
+    
+    contexto = {
+        'arqueos': arqueos,
+    }
+    return render(request, 'inventario/reporte_arqueos.html', contexto)
+
+@login_required
+def gestion_clientes(request):
+    empresa_del_usuario = request.user.profile.empresa
+    clientes = Cliente.objects.filter(empresa=empresa_del_usuario).order_by('nombre')
+    contexto = {'clientes': clientes}
+    return render(request, 'inventario/gestion_clientes.html', contexto)
+
+
+@login_required
+def agregar_cliente(request):
+    empresa_del_usuario = request.user.profile.empresa
+    telefono_autocompletar = request.GET.get('telefono', '')  # <--- NUEVA LÍNEA
+    if request.method == 'POST':
+        form = ClienteForm(request.POST)
+        if form.is_valid():
+            cliente = form.save(commit=False)
+            cliente.empresa = empresa_del_usuario
+            cliente.save()
+            messages.success(request, f'Cliente "{cliente.nombre}" agregado correctamente.')
+            return redirect('gestion-clientes')
+    else:
+        # Pasa el valor inicial al formulario si existe en la URL
+        form = ClienteForm(initial={'telefono': telefono_autocompletar}) # <--- NUEVA LÍNEA
+    contexto = {'form': form, 'titulo': 'Agregar Nuevo Cliente'}
+    return render(request, 'inventario/agregar_editar_cliente.html', contexto)
+
+@login_required
+def editar_cliente(request, cliente_id):
+    empresa_del_usuario = request.user.profile.empresa
+    cliente = get_object_or_404(Cliente, id=cliente_id, empresa=empresa_del_usuario)
+    if request.method == 'POST':
+        form = ClienteForm(request.POST, instance=cliente)
+        if form.is_valid():
+            form.save()
+            messages.success(request, f'Cliente "{cliente.nombre}" actualizado correctamente.')
+            return redirect('gestion-clientes')
+    else:
+        form = ClienteForm(instance=cliente)
+    contexto = {'form': form, 'cliente': cliente, 'titulo': 'Editar Cliente'}
+    return render(request, 'inventario/agregar_editar_cliente.html', contexto)
+
+@login_required
+def eliminar_cliente(request, cliente_id):
+    empresa_del_usuario = request.user.profile.empresa
+    cliente = get_object_or_404(Cliente, id=cliente_id, empresa=empresa_del_usuario)
+    if request.method == 'POST':
+        nombre_cliente = cliente.nombre
+        cliente.delete()
+        messages.success(request, f'Cliente "{nombre_cliente}" eliminado correctamente.')
+        return redirect('gestion-clientes')
+    contexto = {'cliente': cliente}
+    return render(request, 'inventario/cliente_confirm_delete.html', contexto)

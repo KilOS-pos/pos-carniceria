@@ -60,6 +60,14 @@
                         <li class="list-group-item">No se encontraron clientes.</li>
                     {% endfor %}
                 </ul>
+            {% elif busqueda_cliente %}
+                <div class="alert alert-info text-center">
+                    No se encontró el cliente con el término "{{ busqueda_cliente }}".
+                    <br>
+                    ¿Deseas registrar un nuevo cliente con este teléfono?
+                    <br>
+                    <a href="{% url 'agregar-cliente' %}?telefono={{ busqueda_cliente }}" class="btn btn-primary mt-2">Registrar Nuevo Cliente</a>
+                </div>
             {% endif %}
         {% endif %}
 

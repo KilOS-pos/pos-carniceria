@@ -1,7 +1,7 @@
 # inventario/forms.py
 from django import forms
 from django.contrib.auth.models import User
-from .models import Retiro, Producto
+from .models import Retiro, Producto, Cliente
 
 class RetiroForm(forms.ModelForm):
     class Meta:
@@ -65,4 +65,19 @@ class ProductoForm(forms.ModelForm):
             'stock': forms.NumberInput(attrs={'class': 'form-control'}),
             'precio_mayoreo': forms.NumberInput(attrs={'class': 'form-control'}),
             'mayoreo_desde_kg': forms.NumberInput(attrs={'class': 'form-control'}),
+        }
+
+class ClienteForm(forms.ModelForm):
+    class Meta:
+        model = Cliente
+        fields = ['nombre', 'telefono', 'direccion']
+        labels = {
+            'nombre': 'Nombre del Cliente',
+            'telefono': 'Teléfono',
+            'direccion': 'Dirección (opcional)',
+        }
+        widgets = {
+            'nombre': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ej. Juan Pérez'}),
+            'telefono': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ej. 3121234567'}),
+            'direccion': forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': 'Ej. Calle 123, Colonia Centro, Ciudad, Estado'}),
         }

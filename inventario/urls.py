@@ -38,4 +38,11 @@ urlpatterns = [
     path('arqueo/', views.arqueo_caja, name='arqueo-caja'),
     path('venta/exitosa/<int:pedido_id>/', views.venta_exitosa, name='venta-exitosa'),
     path('caja/retiro/exitoso/<int:retiro_id>/', views.retiro_exitoso, name='retiro-exitoso'),
+    path('caja/cerrar/', views.cerrar_caja, name='cerrar-caja'),
+    path('caja/cierre/exitoso/<int:arqueo_id>/', views.cierre_caja_exitoso, name='cierre-caja-exitoso'),
+    path('reportes/arqueos/', views.reporte_arqueos, name='reporte-arqueos'),
+    path('clientes/', views.gestion_clientes, name='gestion-clientes'),
+    path('clientes/agregar/', views.agregar_cliente, name='agregar-cliente'),
+    path('clientes/editar/<int:cliente_id>/', views.editar_cliente, name='editar-cliente'),
+    path('clientes/eliminar/<int:cliente_id>/', views.eliminar_cliente, name='eliminar-cliente'),
 ]

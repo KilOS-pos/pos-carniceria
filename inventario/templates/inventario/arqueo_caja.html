@@ -5,7 +5,6 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h1 class="mb-0">💰 Arqueo de Caja del Día ({{ fecha|date:"d/m/Y" }})</h1>
-    <button id="btn-imprimir-arqueo" class="btn btn-secondary">Imprimir Arqueo</button>
 </div>
 
 <div class="card">
@@ -30,6 +29,20 @@
             <span class="fs-4 fw-bold">(=) Efectivo Esperado en Caja:</span>
             <span class="fs-4 fw-bold text-success">${{ efectivo_esperado|floatformat:2 }}</span>
         </div>
+    </div>
+</div>
+<div class="card mt-4">
+    <div class="card-body p-4">
+        <h2 class="h3">Cierre de Caja</h2>
+        <p class="text-muted">Ingresa el monto de efectivo que tienes en la caja para el cierre del día. Esto reiniciará los totales para el próximo turno.</p>
+        <form method="post" action="{% url 'cerrar-caja' %}">
+            {% csrf_token %}
+            <div class="mb-3">
+                <label for="monto_contado" class="form-label">Monto de efectivo en la caja</label>
+                <input type="number" step="0.01" name="monto_contado" id="monto_contado" class="form-control" required>
+            </div>
+            <button type="submit" class="btn btn-danger btn-lg">Cerrar Caja y Reiniciar</button>
+        </form>
     </div>
 </div>
 

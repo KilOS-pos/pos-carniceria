@@ -1,0 +1,44 @@
+{% extends "inventario/base.html" %}
+
+{% block title %}Gestionar Clientes{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>👥 Gestión de Clientes</h1>
+    <a href="{% url 'agregar-cliente' %}" class="btn btn-primary">➕ Agregar Nuevo Cliente</a>
+</div>
+
+<div class="card card-body">
+    {% if clientes %}
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Nombre</th>
+                        <th>Teléfono</th>
+                        <th>Dirección</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for cliente in clientes %}
+                    <tr>
+                        <td>{{ cliente.nombre }}</td>
+                        <td>{{ cliente.telefono }}</td>
+                        <td>{{ cliente.direccion|default:"No especificada" }}</td>
+                        <td>
+                            <a href="{% url 'editar-cliente' cliente.id %}" class="btn btn-warning btn-sm">Editar</a>
+                            <a href="{% url 'eliminar-cliente' cliente.id %}" class="btn btn-danger btn-sm">Eliminar</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <div class="alert alert-info text-center">
+            Aún no tienes clientes registrados.
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

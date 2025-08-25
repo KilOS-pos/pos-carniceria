@@ -20,6 +20,12 @@
             🛵 Venta a Domicilio
         </a>
     </div>
+
+    <div class="mt-5 p-3 rounded-3 shadow-sm" id="printer-status-container">
+        <span class="fs-5 me-2">Complemento de la Impresora:</span>
+        <span class="fw-bold" id="printer-status">Verificando...</span>
+    </div>
+
 </div>
 
 <script>
@@ -34,6 +40,29 @@
         document.getElementById('segundos').textContent = segundos;
     }
     setInterval(actualizarReloj, 1000);
-    actualizarReloj(); // Llama una vez al cargar para que no haya retraso
+    actualizarReloj();
+
+    // Nuevo script para verificar la impresora
+    document.addEventListener('DOMContentLoaded', function() {
+        const statusElement = document.getElementById('printer-status');
+        const containerElement = document.getElementById('printer-status-container');
+        const urlPuente = "http://127.0.0.1:5000/print";
+        
+        fetch(urlPuente, {
+            method: 'OPTIONS' // Usamos OPTIONS para una verificación rápida sin enviar datos
+        })
+       .then(response => {
+           if (response.ok) {
+               statusElement.textContent = 'Activo ✅';
+               containerElement.classList.remove('bg-danger'); // Removemos la clase de peligro por si acaso
+           } else {
+               throw new Error('No se pudo conectar');
+           }
+       })
+       .catch(error => {
+           statusElement.textContent = 'No instalado ❌';
+           containerElement.classList.remove('bg-success'); // Removemos la clase de éxito por si acaso
+       });
+    });
 </script>
 {% endblock %}

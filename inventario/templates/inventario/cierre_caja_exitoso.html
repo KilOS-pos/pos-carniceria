@@ -1,0 +1,81 @@
+{% extends "inventario/base.html" %}
+
+{% block title %}Cierre de Caja Exitoso{% endblock %}
+
+{% block content %}
+<div class="text-center p-5 mb-4 bg-white rounded-3 shadow-sm">
+    <h1 class="display-4 fw-bold mb-3">✅ Cierre de Caja Exitoso</h1>
+    <p class="lead">El arqueo del día se ha guardado y la caja se ha reiniciado.</p>
+    
+    <div class="card my-4">
+    <div class="card-body">
+        <h2 class="h4">Resumen del Cierre</h2>
+        <ul class="list-group list-group-flush text-start">
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                Efectivo en Ventas:
+                <span class="fw-bold">${{ arqueo.ventas_efectivo|floatformat:2 }}</span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                Ventas con Tarjeta:
+                <span class="fw-bold">${{ arqueo.ventas_tarjeta|floatformat:2 }}</span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                Total de Retiros:
+                <span class="fw-bold text-danger">-${{ arqueo.retiros|floatformat:2 }}</span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between align-items-center fw-bold">
+                Efectivo Esperado:
+                <span>${{ arqueo.efectivo_esperado|floatformat:2 }}</span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between align-items-center fw-bold">
+                Monto Contado:
+                <span>${{ arqueo.monto_contado|floatformat:2 }}</span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between align-items-center fw-bold text-{% if arqueo.diferencia >= 0 %}success{% else %}danger{% endif %}">
+                Diferencia:
+                <span>${{ arqueo.diferencia|floatformat:2 }}</span>
+            </li>
+        </ul>
+    </div>
+</div>
+    
+    <p>Enviando comprobante de cierre a la impresora...</p>
+    
+    <div id="status-impresion" class="alert alert-info mt-4">
+        Contactando con el servicio de impresión local...
+    </div>
+
+    <div class="d-grid gap-2 d-md-flex justify-content-md-center mt-4">
+        <a href="{% url 'pagina-inicio' %}" class="btn btn-primary btn-lg">Volver a Inicio</a>
+    </div>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const textoTicket = JSON.parse('{{ texto_arqueo_json|escapejs }}');
+        const statusDiv = document.getElementById('status-impresion');
+        const urlPuente = "http://127.0.0.1:5000/print";
+        
+        fetch(urlPuente, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ticket_text: textoTicket, commands: ['cut'] })
+        })
+        .then(response => {
+            if (response.ok) {
+                return response.json();
+            }
+            throw new Error('La respuesta de la red no fue exitosa.');
+        })
+        .then(data => {
+            statusDiv.className = 'alert alert-success';
+            statusDiv.textContent = '✅ Comprobante enviado a la impresora.';
+        })
+        .catch((error) => {
+            statusDiv.className = 'alert alert-danger';
+            statusDiv.textContent = '❌ Error: No se pudo conectar con la impresora. Asegúrate de que el programa "puente_impresora.py" esté en ejecución.';
+            console.error('Error:', error);
+        });
+    });
+</script>
+{% endblock %}

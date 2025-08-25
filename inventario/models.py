@@ -2,6 +2,7 @@ from django.db import models
 from django.utils import timezone
 from django.contrib.auth.models import User # Necesario para el futuro
 from django.contrib.auth.models import User
+from decimal import Decimal
 
 # Se define PRIMERO, porque todos los demás modelos se conectarán a este.
 class Empresa(models.Model):
@@ -69,3 +70,17 @@ class UserProfile(models.Model):
 
     def __str__(self):
         return f"Perfil de {self.user.username} en {self.empresa.nombre}"
+
+class Arqueo(models.Model):
+    empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE)
+    fecha = models.DateField(default=timezone.now)
+    ventas_efectivo = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    ventas_tarjeta = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    retiros = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    efectivo_esperado = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    monto_contado = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    diferencia = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    cerrado_por = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+
+    def __str__(self):
+        return f"Arqueo del {self.fecha.strftime('%d/%m/%Y')} - {self.empresa.nombre}"
