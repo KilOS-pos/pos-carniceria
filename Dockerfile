@@ -15,4 +15,4 @@ COPY . .
 EXPOSE 8000
 
 # Comando para correr la aplicación con Gunicorn
-CMD gunicorn config.wsgi:application --bind 0.0.0.0:8000
+CMD gunicorn carniceria_web.config.wsgi:application --bind 0.0.0.0:8000
