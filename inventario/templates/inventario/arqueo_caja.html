@@ -1,0 +1,35 @@
+{% extends "inventario/base.html" %}
+
+{% block title %}Arqueo de Caja{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="mb-0">💰 Arqueo de Caja del Día ({{ fecha|date:"d/m/Y" }})</h1>
+    <a href="{% url 'imprimir-arqueo-caja' %}" class="btn btn-secondary">Imprimir Arqueo</a>
+</div>
+
+<div class="card">
+    <div class="card-body p-4">
+        <div class="d-flex justify-content-between py-3 border-bottom">
+            <span class="fs-5">(+) Ventas en Efectivo:</span>
+            <span class="fs-5 fw-bold">${{ total_efectivo|floatformat:2 }}</span>
+        </div>
+        <div class="d-flex justify-content-between py-3 border-bottom">
+            <span class="fs-5">(+) Ventas con Tarjeta:</span>
+            <span class="fs-5 fw-bold">${{ total_tarjeta|floatformat:2 }}</span>
+        </div>
+        <div class="d-flex justify-content-between py-3 border-bottom fw-bold">
+            <span class="fs-5">(=) Total de Ventas del Día:</span>
+            <span class="fs-5">${{ total_ventas|floatformat:2 }}</span>
+        </div>
+        <div class="d-flex justify-content-between py-3 border-bottom mt-3">
+            <span class="fs-5">(-) Total de Retiros del Día:</span>
+            <span class="fs-5 fw-bold text-danger">-${{ total_retiros|floatformat:2 }}</span>
+        </div>
+        <div class="d-flex justify-content-between pt-3 mt-3 border-top border-2 border-dark">
+            <span class="fs-4 fw-bold">(=) Efectivo Esperado en Caja:</span>
+            <span class="fs-4 fw-bold text-success">${{ efectivo_esperado|floatformat:2 }}</span>
+        </div>
+    </div>
+</div>
+{% endblock %}

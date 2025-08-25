@@ -1,0 +1,75 @@
+{% extends "inventario/base.html" %}
+
+{% block title %}Gestionar Inventario{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+    <div class="col-md-4">
+        <h3>Añadir Nuevo Producto</h3>
+        <div class="card card-body">
+            <form method="post" novalidate>
+                {% csrf_token %}
+
+                {% for field in form %}
+                    <div class="mb-3">
+                        <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
+                        {{ field }}
+                        {% if field.help_text %}
+                            <small class="form-text text-muted">{{ field.help_text }}</small>
+                        {% endif %}
+                        {% for error in field.errors %}
+                            <div class="invalid-feedback d-block">
+                                {{ error }}
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endfor %}
+
+                <div class="d-grid">
+                    <button type="submit" class="btn btn-primary">Guardar Producto</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="col-md-8">
+        <h3>Mi Inventario</h3>
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+               <thead class="table-light">
+                  <tr>
+                     <th>Nombre</th>
+                     <th>Precio</th>
+                     <th>Stock (Kg)</th>
+                     <th>Precio Mayoreo</th>
+                     <th>Acciones</th> </tr>
+               </thead>
+               <tbody>
+                {% for producto in productos %}
+                <tr>
+                     <td>{{ producto.nombre }}</td>
+                     <td>${{ producto.precio|floatformat:2 }}</td>
+                     <td>{{ producto.stock }}</td>
+                     <td>
+                        {% if producto.precio_mayoreo %}
+                             ${{ producto.precio_mayoreo|floatformat:2 }} desde {{ producto.mayoreo_desde_kg }} Kg
+                        {% else %}
+                            --
+                        {% endif %}
+                    </td>
+                    <td>
+                         <a href="{% url 'editar-producto' producto.id %}" class="btn btn-warning btn-sm">Editar</a>
+                         <a href="{% url 'eliminar-producto' producto.id %}" class="btn btn-danger btn-sm">Eliminar</a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5" class="text-center">Aún no has agregado ningún producto.</td>
+                </tr>
+                {% endfor %}
+             </tbody>
+           </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

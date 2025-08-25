@@ -1,0 +1,39 @@
+{% extends "inventario/base.html" %}
+
+{% block title %}Inicio - KilOS POS{% endblock %}
+
+{% block content %}
+<div class="text-center p-5 mb-4 bg-white rounded-3 shadow-sm">
+    <h1 class="display-4 fw-bold mb-3">⚖️ KilOS - Punto De Venta</h1>
+    
+    <div class="reloj-digital display-1 fw-bold mb-4">
+        <span id="hora"></span>:<span id="minutos"></span>:<span id="segundos"></span>
+    </div>
+
+    <p class="lead mb-5">Selecciona el tipo de venta para comenzar</p>
+
+    <div class="d-grid gap-4 d-md-flex justify-content-md-center">
+        <a href="{% url 'lista-productos' tipo_venta='mostrador' %}" class="btn btn-primary btn-lg p-4 shadow" style="font-size: 1.5rem;">
+            🏢 Venta en Mostrador
+        </a>
+        <a href="{% url 'lista-productos' tipo_venta='domicilio' %}" class="btn btn-success btn-lg p-4 shadow" style="font-size: 1.5rem;">
+            🛵 Venta a Domicilio
+        </a>
+    </div>
+</div>
+
+<script>
+    function actualizarReloj() {
+        const ahora = new Date();
+        let horas = ahora.getHours().toString().padStart(2, '0');
+        let minutos = ahora.getMinutes().toString().padStart(2, '0');
+        let segundos = ahora.getSeconds().toString().padStart(2, '0');
+        
+        document.getElementById('hora').textContent = horas;
+        document.getElementById('minutos').textContent = minutos;
+        document.getElementById('segundos').textContent = segundos;
+    }
+    setInterval(actualizarReloj, 1000);
+    actualizarReloj(); // Llama una vez al cargar para que no haya retraso
+</script>
+{% endblock %}

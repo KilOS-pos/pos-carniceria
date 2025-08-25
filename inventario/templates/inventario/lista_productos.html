@@ -1,0 +1,105 @@
+{% extends "inventario/base.html" %}
+
+{% block title %}Punto de Venta - Carnicería Moreno{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-5">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2>🥩 Productos</h2>
+        </div>
+        <table class="table table-bordered table-hover">
+            <thead class="table-light">
+                <tr>
+                    <th>Producto</th>
+                    <th>Precio/Kg</th>
+                    <th>Acción</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for producto in productos %}
+                <tr>
+                    <td>{{ producto.nombre }}</td>
+                    <td>${{ producto.precio }}</td>
+                    <td>
+                        <a class="btn btn-success btn-sm" href="{% url 'agregar-al-carrito' producto.id %}">Añadir</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="col-md-7">
+        {% if tipo_venta == 'domicilio' %}
+             <h2 class="text-success">🛵 Cliente a Domicilio</h2>
+        {% else %}
+             <h2>🏢 Cliente de Mostrador (Opcional)</h2>
+        {% endif %}
+        {% if cliente_seleccionado %}
+            <div class="alert alert-success d-flex justify-content-between align-items-center">
+                <div>
+                    <strong>{{ cliente_seleccionado.nombre }}</strong><br>
+                    <small>{{ cliente_seleccionado.telefono }}</small>
+                </div>
+                <a href="{% url 'quitar-cliente' %}" class="btn-close"></a>
+            </div>
+        {% else %}
+            <form method="get" action="" class="mb-3">
+                <div class="input-group">
+                    <input type="text" name="buscar_cliente" class="form-control" placeholder="Buscar cliente por nombre o teléfono..." value="{{ busqueda_cliente }}">
+                    <button type="submit" class="btn btn-primary">Buscar</button>
+                </div>
+            </form>
+
+            {% if clientes_encontrados %}
+                <ul class="list-group">
+                    {% for cliente in clientes_encontrados %}
+                        <a href="{% url 'seleccionar-cliente' cliente.id %}" class="list-group-item list-group-item-action">{{ cliente.nombre }} - {{ cliente.telefono }}</a>
+                    {% empty %}
+                        <li class="list-group-item">No se encontraron clientes.</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+        {% endif %}
+
+        <h2 class="mt-4">🛒 Carrito</h2>
+        {% if items_del_carrito %}
+            <table class="table">
+                <thead class="table-light">
+                    <tr>
+                        <th>Producto</th>
+                        <th>Cantidad</th>
+                        <th>Subtotal</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in items_del_carrito %}
+                    <tr>
+                        <td>{{ item.producto.nombre }}</td>
+                        <td>
+                            <form action="{% url 'actualizar-cantidad' item.producto.id %}" method="post" class="d-flex gap-2">
+                                {% csrf_token %}
+                                <input type="number" name="cantidad" value="{{ item.cantidad }}" step="0.01" class="form-control form-control-sm" style="width: 80px;">
+                                <button type="submit" class="btn btn-primary btn-sm">OK</button>
+                            </form>
+                        </td>
+                        <td>${{ item.subtotal|floatformat:2 }}</td>
+                        <td><a class="btn btn-danger btn-sm" href="{% url 'eliminar-del-carrito' item.producto.id %}">X</a></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <h3 class="text-end mt-3">TOTAL: ${{ total_carrito|floatformat:2 }}</h3>
+
+            <div class="d-flex gap-2 justify-content-end mt-3">
+                <a href="{% url 'finalizar-venta' 'Efectivo' %}" class="btn btn-success btn-lg">Cobrar en Efectivo</a>
+                <a href="{% url 'finalizar-venta' 'Tarjeta' %}" class="btn btn-info btn-lg">Cobrar con Tarjeta</a>
+            </div>
+        {% else %}
+            <div class="alert alert-secondary">El carrito está vacío.</div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

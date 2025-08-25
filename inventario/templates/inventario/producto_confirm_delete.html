@@ -1,0 +1,21 @@
+{% extends "inventario/base.html" %}
+
+{% block title %}Confirmar Eliminación{% endblock %}
+
+{% block content %}
+<div class="col-md-6 mx-auto">
+    <div class="card card-body text-center mt-5 shadow-sm">
+        <h2 class="mb-4">¿Estás seguro?</h2>
+        <p class="fs-5">Estás a punto de eliminar permanentemente el producto:</p>
+        <h3 class="mb-4 fw-bold">"{{ producto.nombre }}"</h3>
+
+        <form method="post">
+            {% csrf_token %}
+            <div class="d-grid gap-2 d-md-flex justify-content-md-center">
+                <a href="{% url 'gestion-inventario' %}" class="btn btn-secondary btn-lg">Cancelar</a>
+                <button type="submit" class="btn btn-danger btn-lg">Sí, Eliminar</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

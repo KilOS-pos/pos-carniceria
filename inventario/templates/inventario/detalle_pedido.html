@@ -1,0 +1,48 @@
+{% extends "inventario/base.html" %}
+
+{% block title %}Detalle del Pedido #{{ pedido.id }}{% endblock %}
+
+{% block content %}
+<h1 class="mb-4">🧾 Detalle del Pedido #{{ pedido.id }}</h1>
+
+<div class="card mb-4">
+    <div class="card-header">
+        Resumen del Pedido
+    </div>
+    <div class="card-body">
+        <p><strong>Fecha:</strong> {{ pedido.fecha|date:"d/m/Y, H:i" }} hrs</p>
+        <p><strong>Cliente:</strong> {{ pedido.cliente.nombre|default:"Mostrador" }}</p>
+        <p><strong>Método de Pago:</strong> {{ pedido.metodo_pago }}</p>
+        <a href="{% url 'reimprimir-pedido' pedido.id %}" class="btn btn-secondary mt-2">Reimprimir Ticket</a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        Productos Vendidos
+    </div>
+    <div class="card-body">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Producto</th>
+                    <th>Cantidad (Kg)</th>
+                    <th>Precio Unitario</th>
+                    <th>Subtotal</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in pedido.items.all %}
+                <tr>
+                    <td>{{ item.producto.nombre }}</td>
+                    <td>{{ item.cantidad }}</td>
+                    <td>${{ item.precio_unitario|floatformat:2 }}</td>
+                    <td>${% widthratio item.cantidad 1 item.precio_unitario %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <h3 class="text-end mt-3">Total de la Venta: ${{ pedido.total|floatformat:2 }}</h3>
+    </div>
+</div>
+{% endblock %}
