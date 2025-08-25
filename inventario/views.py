@@ -48,45 +48,70 @@ def pagina_inicio(request):
 @login_required
 def lista_productos(request, tipo_venta):
     empresa_del_usuario = request.user.profile.empresa
-    
-    productos = Producto.objects.filter(empresa=empresa_del_usuario).order_by('nombre')
-    carrito = request.session.get('carrito', {})
-    items_del_carrito = []
-    total_carrito = Decimal('0.00')
-    for producto_id, cantidad in carrito.items():
-        producto = get_object_or_404(Producto, id=int(producto_id), empresa=empresa_del_usuario)
-        subtotal = producto.precio * Decimal(str(cantidad))
-        items_del_carrito.append({'producto': producto, 'cantidad': cantidad, 'subtotal': subtotal})
-        total_carrito += subtotal
 
+    # 1. Lógica para seleccionar cliente automáticamente si viene de un registro
+    cliente_id_param = request.GET.get('cliente_id')
+    if cliente_id_param:
+        try:
+            cliente_a_seleccionar = Cliente.objects.get(id=cliente_id_param, empresa=empresa_del_usuario)
+            request.session['cliente_id'] = cliente_a_seleccionar.id # <-- CORRECCIÓN
+        except Cliente.DoesNotExist:
+            pass
+
+    # Lógica de búsqueda de cliente, si no hay uno seleccionado automáticamente
     busqueda_cliente = request.GET.get('buscar_cliente', '')
     clientes_encontrados = None
     if busqueda_cliente:
         clientes_encontrados = Cliente.objects.filter(
-            Q(nombre__icontains=busqueda_cliente) | Q(telefono__icontains=busqueda_cliente),
-            empresa=empresa_del_usuario
-        )
+            empresa=empresa_del_usuario,
+            nombre__icontains=busqueda_cliente
+        ).order_by('nombre')
     
+    productos = Producto.objects.filter(empresa=empresa_del_usuario).order_by('nombre')
+    
+    # 2. Obtener el cliente seleccionado para la plantilla
     cliente_seleccionado = None
-    cliente_id = request.session.get('cliente_id')
-    if cliente_id:
+    cliente_id_sesion = request.session.get('cliente_id') # <-- CORRECCIÓN
+    if cliente_id_sesion:
         try:
-            cliente_seleccionado = Cliente.objects.get(id=cliente_id, empresa=empresa_del_usuario)
+            cliente_seleccionado = Cliente.objects.get(id=cliente_id_sesion, empresa=empresa_del_usuario)
         except Cliente.DoesNotExist:
             del request.session['cliente_id']
 
-    request.session['tipo_venta'] = tipo_venta
+    carrito = request.session.get('carrito', {})
+    items_del_carrito = []
+    total_carrito = Decimal('0.00')
+
+    for producto_id, cantidad in carrito.items():
+        producto = get_object_or_404(Producto, id=int(producto_id), empresa=empresa_del_usuario)
+        
+        # Lógica de precio al mayoreo
+        precio_unitario = producto.precio
+        if producto.precio_mayoreo and producto.mayoreo_desde_kg and Decimal(str(cantidad)) >= producto.mayoreo_desde_kg:
+            precio_unitario = producto.precio_mayoreo
+
+        subtotal = precio_unitario * Decimal(str(cantidad))
+        total_carrito += subtotal
+        items_del_carrito.append({
+            'producto': producto,
+            'cantidad': cantidad,
+            'subtotal': subtotal
+        })
+
+    # Guardar en la sesión para la finalización de la venta
+    request.session['total_venta'] = str(total_carrito)
+
     contexto = {
         'productos': productos,
-        'items_del_carrito': items_del_carrito,
-        'total_carrito': total_carrito,
-        'clientes_encontrados': clientes_encontrados,
         'busqueda_cliente': busqueda_cliente,
+        'clientes_encontrados': clientes_encontrados,
         'cliente_seleccionado': cliente_seleccionado,
         'tipo_venta': tipo_venta,
+        'items_del_carrito': items_del_carrito,
+        'total_carrito': total_carrito,
     }
+    
     return render(request, 'inventario/lista_productos.html', contexto)
-
 @login_required
 def agregar_al_carrito(request, producto_id):
     empresa_del_usuario = request.user.profile.empresa
@@ -715,7 +740,10 @@ def gestion_clientes(request):
 @login_required
 def agregar_cliente(request):
     empresa_del_usuario = request.user.profile.empresa
-    telefono_autocompletar = request.GET.get('telefono', '')  # <--- NUEVA LÍNEA
+    telefono_autocompletar = request.GET.get('telefono', '')
+    # Obtener la URL a la que se debe redirigir después de guardar
+    next_url = request.GET.get('next', 'gestion-clientes') 
+    
     if request.method == 'POST':
         form = ClienteForm(request.POST)
         if form.is_valid():
@@ -723,10 +751,16 @@ def agregar_cliente(request):
             cliente.empresa = empresa_del_usuario
             cliente.save()
             messages.success(request, f'Cliente "{cliente.nombre}" agregado correctamente.')
-            return redirect('gestion-clientes')
+
+            # Redirigir a la URL de origen si existe, de lo contrario, a la gestión de clientes
+            # La variable next_url contendrá la URL de la página de venta
+            if next_url != 'gestion-clientes':
+                return redirect(f'{next_url}?cliente_id={cliente.id}')
+            
+            return redirect(next_url)
     else:
-        # Pasa el valor inicial al formulario si existe en la URL
-        form = ClienteForm(initial={'telefono': telefono_autocompletar}) # <--- NUEVA LÍNEA
+        form = ClienteForm(initial={'telefono': telefono_autocompletar})
+    
     contexto = {'form': form, 'titulo': 'Agregar Nuevo Cliente'}
     return render(request, 'inventario/agregar_editar_cliente.html', contexto)
 

@@ -66,7 +66,7 @@
                     <br>
                     ¿Deseas registrar un nuevo cliente con este teléfono?
                     <br>
-                    <a href="{% url 'agregar-cliente' %}?telefono={{ busqueda_cliente }}" class="btn btn-primary mt-2">Registrar Nuevo Cliente</a>
+                    <a href="{% url 'agregar-cliente' %}?telefono={{ busqueda_cliente }}&next={{ request.path }}" class="btn btn-primary mt-2">Registrar Nuevo Cliente</a>
                 </div>
             {% endif %}
         {% endif %}
