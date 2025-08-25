@@ -1,18 +1,21 @@
-# Usa una imagen oficial de Python como base
-FROM python:3.11-slim
+# Usa una imagen base de Python 3.10
+FROM python:3.10-slim
 
-# Establece el directorio de trabajo
+# Establece el directorio de trabajo a /app
 WORKDIR /app
 
-# Copia el archivo de requerimientos e instálalos
+# Copia los archivos de requerimientos e instálalos
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install -r requirements.txt
 
-# Copia todo el código de tu aplicación
+# Copia todo el código del proyecto al contenedor
 COPY . .
 
-# Expone el puerto 8000
+# Establece el directorio de trabajo a la subcarpeta de tu proyecto Django
+WORKDIR /app/carniceria_web
+
+# Expone el puerto 8000 (el que usará Gunicorn)
 EXPOSE 8000
 
 # Comando para correr la aplicación con Gunicorn
-CMD gunicorn carniceria_web.config.wsgi:application --bind 0.0.0.0:8000
+CMD gunicorn config.wsgi:application --bind 0.0.0.0:8000
