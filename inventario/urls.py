@@ -36,5 +36,6 @@ urlpatterns = [
     # Gestión de Caja
     path('caja/', views.gestion_caja, name='gestion-caja'),
     path('arqueo/', views.arqueo_caja, name='arqueo-caja'),
-    path('arqueo/imprimir/', views.imprimir_arqueo_caja, name='imprimir-arqueo-caja'),
+    path('venta/exitosa/<int:pedido_id>/', views.venta_exitosa, name='venta-exitosa'),
+    path('caja/retiro/exitoso/<int:retiro_id>/', views.retiro_exitoso, name='retiro-exitoso'),
 ]

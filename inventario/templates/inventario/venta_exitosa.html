@@ -1,0 +1,57 @@
+{% extends "inventario/base.html" %}
+
+{% block title %}Venta #{{ pedido.id }} Exitosa{% endblock %}
+
+{% block content %}
+<div class="text-center p-5 mb-4 bg-white rounded-3 shadow-sm">
+    <h1 class="display-4 fw-bold mb-3">✅ Venta Finalizada</h1>
+    <p class="lead">El pedido #{{ pedido.id }} se ha registrado correctamente.</p>
+    <p>Enviando ticket a la impresora...</p>
+    
+    <div id="status-impresion" class="alert alert-info mt-4">
+        Contactando con el servicio de impresión local...
+    </div>
+
+    <div class="d-grid gap-2 d-md-flex justify-content-md-center mt-4">
+        <a href="{% url 'pagina-inicio' %}" class="btn btn-primary btn-lg">Nueva Venta</a>
+        <a href="{% url 'detalle-pedido' pedido.id %}" class="btn btn-secondary btn-lg">Ver Detalle del Pedido</a>
+    </div>
+</div>
+
+<script>
+    // Este script se ejecuta en el navegador del cliente en cuanto la página carga
+    document.addEventListener("DOMContentLoaded", function() {
+        const textoTicket = JSON.parse('{{ texto_del_ticket_json|escapejs }}');
+        const statusDiv = document.getElementById('status-impresion');
+
+        // La URL es 127.0.0.1 porque el NAVEGADOR está en la misma
+        // computadora que el puente de la impresora.
+        const urlPuente = "http://127.0.0.1:5000/print";
+        
+        // Usamos fetch para enviar los datos al puente
+        fetch(urlPuente, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ ticket_text: textoTicket, commands: ['cut'] })
+        })
+        .then(response => {
+            if (response.ok) {
+                return response.json();
+            }
+            throw new Error('La respuesta de la red no fue exitosa.');
+        })
+        .then(data => {
+            console.log('Respuesta del puente:', data);
+            statusDiv.className = 'alert alert-success';
+            statusDiv.textContent = '✅ Ticket enviado a la impresora con éxito.';
+        })
+        .catch((error) => {
+            console.error('Error:', error);
+            statusDiv.className = 'alert alert-danger';
+            statusDiv.textContent = '❌ Error: No se pudo conectar con la impresora. Asegúrate de que el programa "puente_impresora.py" esté en ejecución en esta computadora.';
+        });
+    });
+</script>
+{% endblock %}

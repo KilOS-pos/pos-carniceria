@@ -140,6 +140,20 @@ def quitar_cliente(request):
     tipo_venta = request.session.get('tipo_venta', 'mostrador')
     return redirect('lista-productos', tipo_venta=tipo_venta)
 
+# inventario/views.py
+
+# inventario/views.py
+
+# Asegúrate de tener estas importaciones al inicio de tu archivo views.py
+from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.db import transaction
+from .models import Producto, Pedido, PedidoItem, Cliente
+from decimal import Decimal
+
+# ... (el resto de tus vistas) ...
+
 @login_required
 @transaction.atomic
 def finalizar_venta(request, metodo_pago):
@@ -161,9 +175,12 @@ def finalizar_venta(request, metodo_pago):
 
     total_final = Decimal('0.00')
     items_para_procesar = []
+    
+    # Validar stock y calcular totales antes de crear el pedido
     for producto_id, cantidad in carrito.items():
         producto = get_object_or_404(Producto, id=int(producto_id), empresa=empresa_del_usuario)
         cantidad_decimal = Decimal(str(cantidad))
+        
         if producto.stock < cantidad_decimal:
             messages.error(request, f'No hay suficiente stock para {producto.nombre}. Venta cancelada.')
             return redirect('lista-productos', tipo_venta=tipo_venta)
@@ -172,35 +189,51 @@ def finalizar_venta(request, metodo_pago):
         if producto.precio_mayoreo and producto.mayoreo_desde_kg and cantidad_decimal >= producto.mayoreo_desde_kg:
             precio_unitario_final = producto.precio_mayoreo
 
-        items_para_procesar.append({'producto': producto, 'cantidad': cantidad_decimal, 'precio_unitario': precio_unitario_final})
+        items_para_procesar.append({
+            'producto': producto, 
+            'cantidad': cantidad_decimal, 
+            'precio_unitario': precio_unitario_final
+        })
         total_final += precio_unitario_final * cantidad_decimal
 
-    pedido = Pedido.objects.create(empresa=empresa_del_usuario, total=total_final, cliente=cliente, metodo_pago=metodo_pago)
+    # Crear el pedido en la base de datos
+    pedido = Pedido.objects.create(
+        empresa=empresa_del_usuario, 
+        total=total_final, 
+        cliente=cliente, 
+        metodo_pago=metodo_pago
+    )
 
+    # Crear los items del pedido y descontar el stock
     for item in items_para_procesar:
-        PedidoItem.objects.create(pedido=pedido, producto=item['producto'], cantidad=item['cantidad'], precio_unitario=item['precio_unitario'])
+        PedidoItem.objects.create(
+            pedido=pedido, 
+            producto=item['producto'], 
+            cantidad=item['cantidad'], 
+            precio_unitario=item['precio_unitario']
+        )
+        # Actualizar stock del producto
         producto_a_actualizar = item['producto']
         producto_a_actualizar.stock -= item['cantidad']
         producto_a_actualizar.save()
 
-    # --- LÓGICA DE IMPRESIÓN CORREGIDA ---
-    try:
-        texto_del_ticket = _generar_texto_ticket_venta(pedido) # Usaremos una función auxiliar
-        
-        url_puente = "http://127.0.0.1:5000/print"
-        payload = {"ticket_text": texto_del_ticket}
-        requests.post(url_puente, json=payload, timeout=3)
-        messages.success(request, 'Venta finalizada e impresión enviada con éxito.')
-
-    except requests.exceptions.RequestException:
-        # Se elimina la línea pedido.delete()
-        messages.warning(request, 'Venta guardada, pero no se pudo conectar con el servicio de impresión.')
+    # --- CAMBIO PRINCIPAL ---
+    # Se elimina por completo el bloque try/except que intentaba imprimir desde el servidor.
+    # La impresión ahora es responsabilidad del cliente (navegador).
     
+    # Limpiar la sesión
     del request.session['carrito']
-    if 'cliente_id' in request.session: del request.session['cliente_id']
-    if 'tipo_venta' in request.session: del request.session['tipo_venta']
+    if 'cliente_id' in request.session:
+        del request.session['cliente_id']
+    if 'tipo_venta' in request.session:
+        del request.session['tipo_venta']
+        
+    messages.success(request, f'Venta #{pedido.id} registrada con éxito.')
 
-    return redirect('pagina-inicio')
+    # Redirigir a la nueva página de éxito que activará la impresión en el cliente.
+    return redirect('venta-exitosa', pedido_id=pedido.id)
+
+
 
 # =================================================================================
 # VISTAS DE GESTIÓN DE INVENTARIO
@@ -339,6 +372,7 @@ def dashboard_ventas(request):
 @login_required
 def gestion_caja(request):
     empresa_del_usuario = request.user.profile.empresa
+    
     if request.method == 'POST':
         form = RetiroForm(request.POST)
         if form.is_valid():
@@ -346,27 +380,32 @@ def gestion_caja(request):
             retiro.empresa = empresa_del_usuario
             retiro.save()
             
-            texto_ticket_retiro = _generar_texto_ticket_retiro(retiro)
-            enviar_a_puente_impresora(request, texto_ticket_retiro)
-            
-            messages.success(request, 'Retiro registrado e impreso correctamente.')
-            return redirect('gestion-caja')
+            messages.success(request, 'Retiro registrado con éxito.')
+            # CORRECCIÓN: Esta línea debe estar DENTRO del bloque if.
+            return redirect('retiro-exitoso', retiro_id=retiro.id)
     else:
+        # CORRECCIÓN: Este else se alinea con "if request.method == 'POST'".
         form = RetiroForm()
     
+    # Esta parte del código se ejecuta para las solicitudes GET 
+    # o si el formulario POST no fue válido.
     hoy = timezone.localtime(timezone.now()).date()
     retiros_de_hoy = Retiro.objects.filter(empresa=empresa_del_usuario, fecha__date=hoy).order_by('-fecha')
+    
     contexto = {
         'form': form,
         'retiros': retiros_de_hoy,
     }
     return render(request, 'inventario/gestion_caja.html', contexto)
 
+# inventario/views.py
+
 @login_required
 def arqueo_caja(request):
     empresa_del_usuario = request.user.profile.empresa
     hoy = timezone.localtime(timezone.now()).date()
     
+    # ... (toda la lógica de cálculo que ya tienes sigue igual)
     ventas_efectivo = Pedido.objects.filter(empresa=empresa_del_usuario, fecha__date=hoy, metodo_pago='Efectivo')
     total_efectivo = ventas_efectivo.aggregate(Sum('total'))['total__sum'] or Decimal('0.00')
     
@@ -377,13 +416,22 @@ def arqueo_caja(request):
     total_retiros = retiros_hoy.aggregate(Sum('monto'))['monto__sum'] or Decimal('0.00')
     
     efectivo_esperado = total_efectivo - total_retiros
+    total_ventas = total_efectivo + total_tarjeta
+
+    # Generamos el texto del ticket aquí mismo
+    texto_arqueo = _generar_texto_ticket_arqueo(
+        hoy, total_efectivo, total_tarjeta, total_ventas, total_retiros, efectivo_esperado, empresa=empresa_del_usuario
+    )
+    
     contexto = {
         'fecha': hoy,
         'total_efectivo': total_efectivo,
         'total_tarjeta': total_tarjeta,
-        'total_ventas': total_efectivo + total_tarjeta,
+        'total_ventas': total_ventas,
         'total_retiros': total_retiros,
         'efectivo_esperado': efectivo_esperado,
+        # Y lo pasamos a la plantilla como JSON
+        'texto_arqueo_json': json.dumps(texto_arqueo),
     }
     return render(request, 'inventario/arqueo_caja.html', contexto)
 
@@ -401,29 +449,6 @@ def reimprimir_pedido(request, pedido_id):
     enviar_a_puente_impresora(request, texto_del_ticket)
     return redirect('detalle-pedido', pedido_id=pedido.id)
 
-@login_required
-def imprimir_arqueo_caja(request):
-    empresa_del_usuario = request.user.profile.empresa
-    hoy = timezone.localtime(timezone.now()).date()
-    
-    ventas_efectivo = Pedido.objects.filter(empresa=empresa_del_usuario, fecha__date=hoy, metodo_pago='Efectivo')
-    total_efectivo = ventas_efectivo.aggregate(Sum('total'))['total__sum'] or Decimal('0.00')
-    
-    ventas_tarjeta = Pedido.objects.filter(empresa=empresa_del_usuario, fecha__date=hoy, metodo_pago='Tarjeta')
-    total_tarjeta = ventas_tarjeta.aggregate(Sum('total'))['total__sum'] or Decimal('0.00')
-    
-    retiros_hoy = Retiro.objects.filter(empresa=empresa_del_usuario, fecha__date=hoy)
-    total_retiros = retiros_hoy.aggregate(Sum('monto'))['monto__sum'] or Decimal('0.00')
-    
-    efectivo_esperado = total_efectivo - total_retiros
-    total_ventas = total_efectivo + total_tarjeta
-    
-    texto_arqueo = _generar_texto_ticket_arqueo(
-        hoy, total_efectivo, total_tarjeta, total_ventas, total_retiros, efectivo_esperado, empresa=empresa_del_usuario
-    )
-
-    enviar_a_puente_impresora(request, texto_arqueo)
-    return redirect('arqueo-caja')
 
 # =================================================================================
 # FUNCIONES AUXILIARES (NO SON VISTAS)
@@ -498,6 +523,11 @@ def _generar_texto_ticket_venta(pedido):
     texto_ticket += "=" * 42 + "\n"
     texto_ticket += "¡GRACIAS POR SU PREFERENCIA!\n".center(42)
     texto_ticket += "\n"
+    texto_ticket += "\n"
+    texto_ticket += "\n"
+    texto_ticket += "\n"
+    texto_ticket += "\n"
+
     
     return texto_ticket
 
@@ -517,6 +547,10 @@ def _generar_texto_ticket_retiro(retiro):
     texto_ticket += "=" * 42 + "\n"
     texto_ticket += "FIRMA: __________________\n".center(42)
     texto_ticket += "=" * 42 + "\n"
+    texto_ticket += "\n"
+    texto_ticket += "\n"
+    texto_ticket += "\n"
+    texto_ticket += "\n"
     
     return texto_ticket
 
@@ -536,5 +570,40 @@ def _generar_texto_ticket_arqueo(fecha, total_efectivo, total_tarjeta, total_ven
     texto_ticket += "=" * 42 + "\n"
     texto_ticket += f"{'EFECTIVO ESPERADO:':>32} ${efectivo_esperado:.2f}\n"
     texto_ticket += "=" * 42 + "\n"
+    texto_ticket += "\n"
+    texto_ticket += "\n"
+    texto_ticket += "\n"
+    texto_ticket += "\n"
+    texto_ticket += "\n"
+    texto_ticket += "\n"
     
     return texto_ticket
+
+
+@login_required
+def venta_exitosa(request, pedido_id):
+    empresa_del_usuario = request.user.profile.empresa
+    pedido = get_object_or_404(Pedido, id=pedido_id, empresa=empresa_del_usuario)
+
+    # Generamos el texto del ticket aquí para pasarlo a la plantilla
+    texto_del_ticket = _generar_texto_ticket_venta(pedido)
+
+    contexto = {
+        'pedido': pedido,
+        'texto_del_ticket_json': json.dumps(texto_del_ticket),
+    }
+    return render(request, 'inventario/venta_exitosa.html', contexto)
+
+@login_required
+def retiro_exitoso(request, retiro_id):
+    empresa_del_usuario = request.user.profile.empresa
+    retiro = get_object_or_404(Retiro, id=retiro_id, empresa=empresa_del_usuario)
+
+    # Generamos el texto del ticket para pasarlo a la plantilla
+    texto_del_ticket = _generar_texto_ticket_retiro(retiro)
+
+    contexto = {
+        'retiro': retiro,
+        'texto_del_ticket_json': json.dumps(texto_del_ticket),
+    }
+    return render(request, 'inventario/retiro_exitoso.html', contexto)

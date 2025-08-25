@@ -5,7 +5,7 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h1 class="mb-0">💰 Arqueo de Caja del Día ({{ fecha|date:"d/m/Y" }})</h1>
-    <a href="{% url 'imprimir-arqueo-caja' %}" class="btn btn-secondary">Imprimir Arqueo</a>
+    <button id="btn-imprimir-arqueo" class="btn btn-secondary">Imprimir Arqueo</button>
 </div>
 
 <div class="card">
@@ -32,4 +32,36 @@
         </div>
     </div>
 </div>
+
+<script>
+    document.getElementById('btn-imprimir-arqueo').addEventListener('click', function() {
+        const textoTicket = JSON.parse('{{ texto_arqueo_json|escapejs }}');
+        const urlPuente = "http://127.0.0.1:5000/print";
+        const boton = this; // Guardamos una referencia al botón
+
+        // Opcional: Deshabilitar el botón para evitar clics múltiples
+        boton.disabled = true;
+        boton.textContent = 'Imprimiendo...';
+        
+        fetch(urlPuente, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ticket_text: textoTicket })
+        })
+        .then(response => {
+            if (!response.ok) {
+                return Promise.reject('Error de red');
+            }
+            alert('Arqueo enviado a la impresora.');
+        })
+        .catch((error) => {
+            alert('Error: No se pudo conectar con la impresora. Asegúrate de que el "puente_impresora.py" esté en ejecución.');
+        })
+        .finally(() => {
+            // Volver a habilitar el botón
+            boton.disabled = false;
+            boton.textContent = 'Imprimir Arqueo';
+        });
+    });
+</script>
 {% endblock %}

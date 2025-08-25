@@ -1,0 +1,42 @@
+{% extends "inventario/base.html" %}
+
+{% block title %}Retiro #{{ retiro.id }} Exitoso{% endblock %}
+
+{% block content %}
+<div class="text-center p-5 mb-4 bg-white rounded-3 shadow-sm">
+    <h1 class="display-4 fw-bold mb-3">💸 Retiro Registrado</h1>
+    <p class="lead">El retiro de ${{ retiro.monto|floatformat:2 }} por concepto de "{{ retiro.concepto }}" se ha guardado.</p>
+    <p>Enviando comprobante a la impresora...</p>
+    
+    <div id="status-impresion" class="alert alert-info mt-4">
+        Contactando con el servicio de impresión local...
+    </div>
+
+    <div class="d-grid gap-2 d-md-flex justify-content-md-center mt-4">
+        <a href="{% url 'gestion-caja' %}" class="btn btn-primary btn-lg">Volver a Caja</a>
+    </div>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const textoTicket = JSON.parse('{{ texto_del_ticket_json|escapejs }}');
+        const statusDiv = document.getElementById('status-impresion');
+        const urlPuente = "http://127.0.0.1:5000/print";
+        
+        fetch(urlPuente, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ticket_text: textoTicket })
+        })
+        .then(response => response.ok ? response.json() : Promise.reject('Error de red'))
+        .then(data => {
+            statusDiv.className = 'alert alert-success';
+            statusDiv.textContent = '✅ Comprobante enviado a la impresora.';
+        })
+        .catch((error) => {
+            statusDiv.className = 'alert alert-danger';
+            statusDiv.textContent = '❌ Error: No se pudo conectar con la impresora. Asegúrate de que el "puente_impresora.py" esté en ejecución.';
+        });
+    });
+</script>
+{% endblock %}
