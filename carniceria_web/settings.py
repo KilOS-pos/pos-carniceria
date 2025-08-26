@@ -78,13 +78,19 @@ TEMPLATES = [
 WSGI_APPLICATION = 'carniceria_web.wsgi.application'
 
 
-# --- CONFIGURACIÓN DE BASE DE DATOS MODIFICADA ---
-# Se elimina el bloque anterior y se reemplaza por este.
-# Ahora lee las credenciales desde las variables de entorno.
+# --- CONFIGURACIÓN DE BASE DE DATOS INTELIGENTE ---
+
+# Revisa si la app está corriendo en el entorno de Google Cloud Run
+if os.environ.get('K_SERVICE'):
+    # Usa el motor especial de Cloud SQL para la nube
+    DB_ENGINE = 'django_cloud_sql.backends.postgresql'
+else:
+    # Usa el motor estándar de PostgreSQL para tu desarrollo local
+    DB_ENGINE = 'django.db.backends.postgresql'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql',
+        'ENGINE': DB_ENGINE,
         'NAME': os.environ.get('DB_NAME'),
         'USER': os.environ.get('DB_USER'),
         'PASSWORD': os.environ.get('DB_PASSWORD'),
