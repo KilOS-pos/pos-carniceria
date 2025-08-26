@@ -76,6 +76,8 @@ WSGI_APPLICATION = 'carniceria_web.wsgi.application'
 import dj_database_url
 import os
 
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
 DATABASES = {
     'default': dj_database_url.config(
         default=os.environ.get('DATABASE_URL', 'sqlite:///db.sqlite3')
