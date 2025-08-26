@@ -19,4 +19,4 @@ COPY . /app/
 EXPOSE 8080
 
 # Comando para iniciar la aplicación
-CMD ["gunicorn", "posCarniceria.wsgi", "--bind", "0.0.0.0:8080"]
+CMD ["gunicorn", "carniceria_web.wsgi", "--bind", "0.0.0.0:8080"]
