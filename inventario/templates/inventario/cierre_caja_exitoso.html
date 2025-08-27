@@ -54,7 +54,7 @@
     document.addEventListener("DOMContentLoaded", function() {
         const textoTicket = JSON.parse('{{ texto_arqueo_json|escapejs }}');
         const statusDiv = document.getElementById('status-impresion');
-        const urlPuente = "http://127.0.0.1:5000/print";
+        const urlPuente = '{{ url_puente_impresora }}';
         
         fetch(urlPuente, {
             method: 'POST',

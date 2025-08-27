@@ -17,6 +17,9 @@ from .forms import RetiroForm, RegistroForm, ProductoForm, ClienteForm, ClienteD
 from django.db.models.functions import TruncDay, TruncHour, TruncMonth
 from .models import Arqueo
 
+# --- CORRECCIÓN: URL CENTRALIZADA ---
+URL_PUENTE_IMPRESORA = "http://127.0.0.1:5000/print"
+
 # =================================================================================
 # VISTAS DE AUTENTICACIÓN Y PÁGINA PRINCIPAL
 # =================================================================================
@@ -40,8 +43,6 @@ def registro_view(request):
     return render(request, 'inventario/registro.html', {'form': form})
 
 
-# inventario/views.py
-
 @login_required
 def inicio_view(request):
     try:
@@ -55,12 +56,10 @@ def inicio_view(request):
     empresa_del_usuario = request.user.profile.empresa
     hoy = timezone.localtime(timezone.now())
 
-    # --- NUEVA LÓGICA DE DOBLE FILTRO ---
     group_by = request.GET.get('group_by', 'dia')
     time_range = request.GET.get('time_range', '7dias')
 
     if group_by == 'mes':
-        # Lógica si se agrupa por MES
         trunc_func = TruncMonth('fecha')
         if time_range == '6meses':
             fecha_inicio = hoy - timedelta(days=180)
@@ -69,11 +68,10 @@ def inicio_view(request):
             fecha_inicio = hoy - timedelta(days=270)
             titulo_reporte = "Resumen de los Últimos 9 Meses"
         else:
-            time_range = '3meses' # Default para 'mes'
+            time_range = '3meses'
             fecha_inicio = hoy - timedelta(days=90)
             titulo_reporte = "Resumen de los Últimos 3 Meses"
     else:
-        # Lógica si se agrupa por DÍA (default)
         group_by = 'dia'
         trunc_func = TruncDay('fecha')
         if time_range == 'hoy':
@@ -83,11 +81,10 @@ def inicio_view(request):
             fecha_inicio = hoy - timedelta(days=29)
             titulo_reporte = "Resumen de los Últimos 30 Días"
         else:
-            time_range = '7dias' # Default para 'dia'
+            time_range = '7dias'
             fecha_inicio = hoy - timedelta(days=6)
             titulo_reporte = "Resumen de los Últimos 7 Días"
 
-    # Consulta única que se adapta a los filtros
     pedidos_agrupados = Pedido.objects.filter(
         empresa=empresa_del_usuario,
         fecha__gte=fecha_inicio
@@ -144,10 +141,8 @@ def inicio_view(request):
 def lista_productos(request, tipo_venta):
     empresa_del_usuario = request.user.profile.empresa
     
-    # 1. Lógica para manejar la sesión del tipo de venta
     request.session['tipo_venta'] = tipo_venta
 
-    # 2. Lógica para manejar la selección o creación del cliente
     cliente_seleccionado = None
     if 'cliente_id' in request.session:
         try:
@@ -155,12 +150,10 @@ def lista_productos(request, tipo_venta):
         except Cliente.DoesNotExist:
             del request.session['cliente_id']
     
-    # 3. Determinar qué formulario de cliente usar
-    form_cliente = None # Inicializamos form_cliente
+    form_cliente = None
     if tipo_venta == 'domicilio':
         form_cliente = ClienteDomicilioForm()
 
-    # 4. Procesar el formulario POST para agregar un nuevo cliente
     if request.method == 'POST':
         if 'guardar_cliente' in request.POST:
             if tipo_venta == 'domicilio':
@@ -178,7 +171,6 @@ def lista_productos(request, tipo_venta):
             else:
                 messages.error(request, 'Hubo un error al guardar el cliente. Por favor, revisa los datos proporcionados.')
 
-    # 5. Lógica de búsqueda de cliente si no hay uno seleccionado
     busqueda_cliente = request.GET.get('buscar_cliente', '')
     clientes_encontrados = None
     if busqueda_cliente:
@@ -187,7 +179,6 @@ def lista_productos(request, tipo_venta):
             empresa=empresa_del_usuario
         ).order_by('nombre')
     
-    # 6. Obtener productos y carrito
     productos = Producto.objects.filter(empresa=empresa_del_usuario, is_active=True).order_by('nombre') 
     carrito = request.session.get('carrito', {})
     items_del_carrito = []
@@ -208,16 +199,15 @@ def lista_productos(request, tipo_venta):
             'subtotal': subtotal
         })
 
-    # ### NUEVO BLOQUE DE CÓDIGO PARA OBTENER EL ESTADO DE LA CAJA ###
     hoy = timezone.localtime(timezone.now()).date()
     
-    total_efectivo = Pedido.objects.filter(empresa=empresa_del_usuario, fecha__date=hoy, metodo_pago='Efectivo').aggregate(Sum('total'))['total__sum'] or Decimal('0.00')
-    total_tarjeta = Pedido.objects.filter(empresa=empresa_del_usuario, fecha__date=hoy, metodo_pago='Tarjeta').aggregate(Sum('total'))['total__sum'] or Decimal('0.00')
-    total_retiros = Retiro.objects.filter(empresa=empresa_del_usuario, fecha__date=hoy).aggregate(Sum('monto'))['monto__sum'] or Decimal('0.00')
+    # --- CAMBIO IMPORTANTE: Solo contar ventas y retiros que NO han sido asignados a un arqueo ---
+    total_efectivo = Pedido.objects.filter(empresa=empresa_del_usuario, fecha__date=hoy, metodo_pago='Efectivo', arqueo__isnull=True).aggregate(Sum('total'))['total__sum'] or Decimal('0.00')
+    total_tarjeta = Pedido.objects.filter(empresa=empresa_del_usuario, fecha__date=hoy, metodo_pago='Tarjeta', arqueo__isnull=True).aggregate(Sum('total'))['total__sum'] or Decimal('0.00')
+    total_retiros = Retiro.objects.filter(empresa=empresa_del_usuario, fecha__date=hoy, arqueo__isnull=True).aggregate(Sum('monto'))['monto__sum'] or Decimal('0.00')
     
     efectivo_esperado = total_efectivo - total_retiros
     total_ventas_dia = total_efectivo + total_tarjeta
-    # ### FIN DEL NUEVO BLOQUE DE CÓDIGO ###
 
     contexto = {
         'productos': productos,
@@ -228,7 +218,6 @@ def lista_productos(request, tipo_venta):
         'items_del_carrito': items_del_carrito,
         'total_carrito': total_carrito,
         'form_cliente': form_cliente,
-        # --- NUEVOS DATOS AÑADIDOS AL CONTEXTO ---
         'total_efectivo': total_efectivo,
         'total_tarjeta': total_tarjeta,
         'total_retiros': total_retiros,
@@ -321,7 +310,6 @@ def finalizar_venta(request, metodo_pago):
         })
         total_final += precio_unitario_final * cantidad_decimal
 
-    # --- VALIDACIÓN DE STOCK ANTES DE CREAR EL PEDIDO ---
     for item in items_para_procesar:
         producto = item['producto']
         cantidad = item['cantidad']
@@ -332,7 +320,6 @@ def finalizar_venta(request, metodo_pago):
             if producto.stock < cantidad:
                 messages.error(request, f'No hay suficiente stock para "{producto.nombre}" ({producto.stock} disponible). Venta cancelada.')
                 return redirect('pos', tipo_venta=tipo_venta)
-    # --- FIN DE LA VALIDACIÓN DE STOCK ---
 
     cliente = None
     if 'cliente_id' in request.session:
@@ -374,7 +361,6 @@ def finalizar_venta(request, metodo_pago):
                 pedido=pedido, producto=item['producto'], 
                 cantidad=item['cantidad'], precio_unitario=item['precio_unitario']
             )
-            # La resta de stock ahora es segura gracias a la validación previa
             if item['producto'].requiere_stock:
                 item['producto'].stock -= item['cantidad']
                 item['producto'].save()
@@ -431,14 +417,11 @@ def eliminar_producto(request, producto_id):
     empresa_del_usuario = request.user.profile.empresa
     producto = get_object_or_404(Producto, id=producto_id, empresa=empresa_del_usuario)
     
-    # La nueva lógica: en lugar de borrar, se desactiva el producto.
     producto.is_active = False
     producto.save()
     
     messages.success(request, f'El producto "{producto.nombre}" ha sido desactivado correctamente.')
     return redirect('gestion-inventario')
-    contexto = {'producto': producto}
-    return render(request, 'inventario/producto_confirm_delete.html', contexto)
 
 @login_required
 def reactivar_producto(request, producto_id):
@@ -452,7 +435,6 @@ def reactivar_producto(request, producto_id):
 @login_required
 def lista_productos_archivados(request):
     empresa_del_usuario = request.user.profile.empresa
-    # Buscamos únicamente los productos que están marcados como inactivos (is_active=False)
     productos_archivados = Producto.objects.filter(empresa=empresa_del_usuario, is_active=False).order_by('nombre')
     contexto = {
         'productos': productos_archivados,
@@ -493,8 +475,16 @@ def reporte_ventas(request):
 
 @login_required
 def detalle_pedido(request, pedido_id):
-    pedido = get_object_or_404(Pedido, id=pedido_id, empresa=request.user.profile.empresa)
-    contexto = {'pedido': pedido}
+    empresa_del_usuario = request.user.profile.empresa
+    pedido = get_object_or_404(Pedido, id=pedido_id, empresa=empresa_del_usuario)
+
+    texto_del_ticket = _generar_texto_ticket_venta(pedido)
+
+    contexto = {
+        'pedido': pedido,
+        'texto_del_ticket_json': json.dumps(texto_del_ticket),
+        'url_puente_impresora': URL_PUENTE_IMPRESORA
+    }
     return render(request, 'inventario/detalle_pedido.html', contexto)
 
 @login_required
@@ -555,18 +545,14 @@ def gestion_caja(request):
             retiro = form.save(commit=False)
             retiro.empresa = empresa_del_usuario
             retiro.save()
-            
             messages.success(request, 'Retiro registrado con éxito.')
-            # CORRECCIÓN: Esta línea debe estar DENTRO del bloque if.
             return redirect('retiro-exitoso', retiro_id=retiro.id)
     else:
-        # CORRECCIÓN: Este else se alinea con "if request.method == 'POST'".
         form = RetiroForm()
     
-    # Esta parte del código se ejecuta para las solicitudes GET 
-    # o si el formulario POST no fue válido.
     hoy = timezone.localtime(timezone.now()).date()
-    retiros_de_hoy = Retiro.objects.filter(empresa=empresa_del_usuario, fecha__date=hoy).order_by('-fecha')
+    # --- CAMBIO IMPORTANTE: Solo mostrar retiros que NO han sido asignados a un arqueo ---
+    retiros_de_hoy = Retiro.objects.filter(empresa=empresa_del_usuario, fecha__date=hoy, arqueo__isnull=True).order_by('-fecha')
     
     contexto = {
         'form': form,
@@ -574,27 +560,24 @@ def gestion_caja(request):
     }
     return render(request, 'inventario/gestion_caja.html', contexto)
 
-# inventario/views.py
-
 @login_required
 def arqueo_caja(request):
     empresa_del_usuario = request.user.profile.empresa
     hoy = timezone.localtime(timezone.now()).date()
     
-    ventas_efectivo = Pedido.objects.filter(empresa=empresa_del_usuario, fecha__date=hoy, metodo_pago='Efectivo')
+    # --- CAMBIO IMPORTANTE: Solo contar ventas y retiros que NO han sido asignados a un arqueo ---
+    ventas_efectivo = Pedido.objects.filter(empresa=empresa_del_usuario, fecha__date=hoy, metodo_pago='Efectivo', arqueo__isnull=True)
     total_efectivo = ventas_efectivo.aggregate(Sum('total'))['total__sum'] or Decimal('0.00')
     
-    ventas_tarjeta = Pedido.objects.filter(empresa=empresa_del_usuario, fecha__date=hoy, metodo_pago='Tarjeta')
+    ventas_tarjeta = Pedido.objects.filter(empresa=empresa_del_usuario, fecha__date=hoy, metodo_pago='Tarjeta', arqueo__isnull=True)
     total_tarjeta = ventas_tarjeta.aggregate(Sum('total'))['total__sum'] or Decimal('0.00')
     
-    retiros_hoy = Retiro.objects.filter(empresa=empresa_del_usuario, fecha__date=hoy)
+    retiros_hoy = Retiro.objects.filter(empresa=empresa_del_usuario, fecha__date=hoy, arqueo__isnull=True)
     total_retiros = retiros_hoy.aggregate(Sum('monto'))['monto__sum'] or Decimal('0.00')
     
     efectivo_esperado = total_efectivo - total_retiros
     total_ventas = total_efectivo + total_tarjeta
 
-    # Generamos un Arqueo "temporal" para la visualización del ticket.
-    # No lo guardamos en la base de datos, es solo para pasar datos.
     arqueo_temporal = Arqueo(
         empresa=empresa_del_usuario,
         fecha=hoy,
@@ -602,8 +585,8 @@ def arqueo_caja(request):
         ventas_tarjeta=total_tarjeta,
         retiros=total_retiros,
         efectivo_esperado=efectivo_esperado,
-        monto_contado=Decimal('0.00'), # No hay monto contado todavía
-        diferencia=Decimal('0.00') # No hay diferencia todavía
+        monto_contado=Decimal('0.00'),
+        diferencia=Decimal('0.00')
     )
     
     texto_arqueo = _generar_texto_ticket_arqueo(arqueo_temporal)
@@ -616,6 +599,7 @@ def arqueo_caja(request):
         'total_retiros': total_retiros,
         'efectivo_esperado': efectivo_esperado,
         'texto_arqueo_json': json.dumps(texto_arqueo),
+        'url_puente_impresora': URL_PUENTE_IMPRESORA  # <-- CORRECCIÓN
     }
     return render(request, 'inventario/arqueo_caja.html', contexto)
 
@@ -627,30 +611,27 @@ def arqueo_caja(request):
 def reimprimir_pedido(request, pedido_id):
     empresa_del_usuario = request.user.profile.empresa
     pedido = get_object_or_404(Pedido, id=pedido_id, empresa=empresa_del_usuario)
-    tipo_venta = 'domicilio' if pedido.cliente and pedido.cliente.direccion else 'mostrador'
-    
+
     texto_del_ticket = _generar_texto_ticket_venta(pedido)
-    enviar_a_puente_impresora(request, texto_del_ticket)
-    return redirect('detalle-pedido', pedido_id=pedido.id)
+
+    contexto = {
+        'pedido': pedido,
+        'texto_del_ticket_json': json.dumps(texto_del_ticket),
+        'url_puente_impresora': URL_PUENTE_IMPRESORA
+    }
+    return render(request, 'inventario/reimprimir_ticket.html', contexto)
 
 
 # =================================================================================
 # FUNCIONES AUXILIARES (NO SON VISTAS)
 # =================================================================================
 
-# inventario/views.py
-
 def enviar_a_puente_impresora(request, texto_ticket):
-    # --- CORRECCIÓN: La IP ahora es 127.0.0.1 ---
-    puente_url = "http://127.0.0.1:5000/print"
     try:
         payload = {'ticket_text': texto_ticket}
-        # Timeout de 3 segundos para no bloquear la app si el puente no responde
-        response = requests.post(puente_url, json=payload, timeout=3)
+        response = requests.post(URL_PUENTE_IMPRESORA, json=payload, timeout=3) # <-- CORRECCIÓN
 
         if response.status_code == 200:
-            # No mostraremos un mensaje de éxito en cada impresión para no saturar la pantalla.
-            # El usuario asumirá que funcionó si el ticket se imprime.
             return True
         else:
             messages.error(request, f"Error del puente de impresión: {response.json().get('message', 'Error desconocido')}")
@@ -706,13 +687,8 @@ def _generar_texto_ticket_venta(pedido):
     texto_ticket += f"{'PAGO:':>32} {pedido.metodo_pago.upper()}\n"
     texto_ticket += "=" * 42 + "\n"
     texto_ticket += "¡GRACIAS POR SU PREFERENCIA!\n".center(42)
-    texto_ticket += "\n"
-    texto_ticket += "\n"
-    texto_ticket += "\n"
-    texto_ticket += "\n"
-    texto_ticket += "\n"
+    texto_ticket += "\n" * 5
 
-    
     return texto_ticket
 
 def _generar_texto_ticket_retiro(retiro):
@@ -731,10 +707,7 @@ def _generar_texto_ticket_retiro(retiro):
     texto_ticket += "=" * 42 + "\n"
     texto_ticket += "FIRMA: __________________\n".center(42)
     texto_ticket += "=" * 42 + "\n"
-    texto_ticket += "\n"
-    texto_ticket += "\n"
-    texto_ticket += "\n"
-    texto_ticket += "\n"
+    texto_ticket += "\n" * 4
     
     return texto_ticket
 
@@ -742,14 +715,12 @@ def _generar_texto_ticket_arqueo(arqueo):
     empresa = arqueo.empresa
     fecha_str = arqueo.fecha.strftime('%d/%m/%Y')
     
-    # Manejamos el caso de que no haya un usuario asignado
     cerrado_por_nombre = arqueo.cerrado_por.username if arqueo.cerrado_por else "No especificado"
     
     texto_ticket = f"{empresa.nombre.center(42)}\n"
     texto_ticket += "COMPROBANTE DE CIERRE DE CAJA\n".center(42)
     texto_ticket += "=" * 42 + "\n"
     texto_ticket += f"FECHA: {fecha_str}\n"
-    # Usamos la nueva variable 'cerrado_por_nombre'
     texto_ticket += f"CERRADO POR: {cerrado_por_nombre}\n"
     texto_ticket += "-" * 42 + "\n"
     texto_ticket += f"{'VENTAS EN EFECTIVO:':>32} ${arqueo.ventas_efectivo:.2f}\n"
@@ -760,7 +731,6 @@ def _generar_texto_ticket_arqueo(arqueo):
     texto_ticket += "=" * 42 + "\n"
     texto_ticket += f"{'EFECTIVO ESPERADO:':>32} ${arqueo.efectivo_esperado:.2f}\n"
     texto_ticket += f"{'MONTO CONTADO:':>32} ${arqueo.monto_contado:.2f}\n"
-    
     texto_ticket += "-" * 42 + "\n"
     
     diferencia_signo = "+" if arqueo.diferencia >= 0 else ""
@@ -768,11 +738,7 @@ def _generar_texto_ticket_arqueo(arqueo):
     
     texto_ticket += "=" * 42 + "\n"
     texto_ticket += "FIRMA: __________________\n".center(42)
-    texto_ticket += "\n"
-    texto_ticket += "\n"
-    texto_ticket += "\n"
-    texto_ticket += "\n"
-    texto_ticket += "\n"
+    texto_ticket += "\n" * 5
     
     return texto_ticket
 
@@ -781,12 +747,12 @@ def venta_exitosa(request, pedido_id):
     empresa_del_usuario = request.user.profile.empresa
     pedido = get_object_or_404(Pedido, id=pedido_id, empresa=empresa_del_usuario)
 
-    # Generamos el texto del ticket aquí para pasarlo a la plantilla
     texto_del_ticket = _generar_texto_ticket_venta(pedido)
 
     contexto = {
         'pedido': pedido,
         'texto_del_ticket_json': json.dumps(texto_del_ticket),
+        'url_puente_impresora': URL_PUENTE_IMPRESORA # <-- CORRECCIÓN
     }
     return render(request, 'inventario/venta_exitosa.html', contexto)
 
@@ -795,12 +761,12 @@ def retiro_exitoso(request, retiro_id):
     empresa_del_usuario = request.user.profile.empresa
     retiro = get_object_or_404(Retiro, id=retiro_id, empresa=empresa_del_usuario)
 
-    # Generamos el texto del ticket para pasarlo a la plantilla
     texto_del_ticket = _generar_texto_ticket_retiro(retiro)
 
     contexto = {
         'retiro': retiro,
         'texto_del_ticket_json': json.dumps(texto_del_ticket),
+        'url_puente_impresora': URL_PUENTE_IMPRESORA # <-- CORRECCIÓN
     }
     return render(request, 'inventario/retiro_exitoso.html', contexto)
 
@@ -818,19 +784,17 @@ def cerrar_caja(request):
             messages.error(request, "Monto inválido. Por favor, ingresa un número válido.")
             return redirect('arqueo-caja')
 
-        ventas_efectivo_hoy = Pedido.objects.filter(empresa=empresa_del_usuario, fecha__date=hoy, metodo_pago='Efectivo')
-        total_efectivo = ventas_efectivo_hoy.aggregate(Sum('total'))['total__sum'] or Decimal('0.00')
-        
-        ventas_tarjeta_hoy = Pedido.objects.filter(empresa=empresa_del_usuario, fecha__date=hoy, metodo_pago='Tarjeta')
-        total_tarjeta = ventas_tarjeta_hoy.aggregate(Sum('total'))['total__sum'] or Decimal('0.00')
-        
-        retiros_hoy = Retiro.objects.filter(empresa=empresa_del_usuario, fecha__date=hoy)
-        total_retiros = retiros_hoy.aggregate(Sum('monto'))['monto__sum'] or Decimal('0.00')
+        # --- CAMBIO IMPORTANTE: Solo seleccionar registros SIN arqueo asignado ---
+        pedidos_del_dia = Pedido.objects.filter(empresa=empresa_del_usuario, fecha__date=hoy, arqueo__isnull=True)
+        retiros_del_dia = Retiro.objects.filter(empresa=empresa_del_usuario, fecha__date=hoy, arqueo__isnull=True)
+
+        total_efectivo = pedidos_del_dia.filter(metodo_pago='Efectivo').aggregate(Sum('total'))['total__sum'] or Decimal('0.00')
+        total_tarjeta = pedidos_del_dia.filter(metodo_pago='Tarjeta').aggregate(Sum('total'))['total__sum'] or Decimal('0.00')
+        total_retiros = retiros_del_dia.aggregate(Sum('monto'))['monto__sum'] or Decimal('0.00')
 
         efectivo_esperado = total_efectivo - total_retiros
         diferencia = monto_contado - efectivo_esperado
 
-        # Guardar el arqueo del día en la base de datos
         arqueo = Arqueo.objects.create(
             empresa=empresa_del_usuario,
             fecha=hoy,
@@ -843,14 +807,11 @@ def cerrar_caja(request):
             cerrado_por=request.user 
         )
 
-        # Eliminar las ventas y retiros del día
-        ventas_tarjeta_hoy.delete()
-        ventas_efectivo_hoy.delete()
-        retiros_hoy.delete()
+        # --- CORRECCIÓN: NO SE BORRA, SE ACTUALIZA ---
+        pedidos_del_dia.update(arqueo=arqueo)
+        retiros_del_dia.update(arqueo=arqueo)
         
         messages.success(request, "Caja cerrada exitosamente. Se ha generado un comprobante de cierre.")
-
-        # Redirigir a la nueva página de éxito que activará la impresión
         return redirect('cierre-caja-exitoso', arqueo_id=arqueo.id)
 
     return redirect('arqueo-caja')
@@ -860,12 +821,12 @@ def cierre_caja_exitoso(request, arqueo_id):
     empresa_del_usuario = request.user.profile.empresa
     arqueo = get_object_or_404(Arqueo, id=arqueo_id, empresa=empresa_del_usuario)
 
-    # Generamos el texto del ticket aquí para pasarlo a la plantilla
     texto_del_ticket = _generar_texto_ticket_arqueo(arqueo)
 
     contexto = {
         'arqueo': arqueo,
         'texto_arqueo_json': json.dumps(texto_del_ticket),
+        'url_puente_impresora': URL_PUENTE_IMPRESORA # <-- CORRECCIÓN
     }
     return render(request, 'inventario/cierre_caja_exitoso.html', contexto)
 
@@ -891,7 +852,6 @@ def gestion_clientes(request):
 def agregar_cliente(request):
     empresa_del_usuario = request.user.profile.empresa
     telefono_autocompletar = request.GET.get('telefono', '')
-    # Obtener la URL a la que se debe redirigir después de guardar
     next_url = request.GET.get('next', 'gestion-clientes') 
     
     if request.method == 'POST':
@@ -902,13 +862,8 @@ def agregar_cliente(request):
             cliente.save()
             messages.success(request, f'Cliente "{cliente.nombre}" agregado correctamente.')
 
-            # Redirigir a la URL de origen si existe, de lo contrario, a la gestión de clientes
-            # La variable next_url contendrá la URL de la página de venta
             if next_url != 'gestion-clientes':
-                # CORRECCIÓN: redirigir a la vista de POS ('pos') y seleccionar el cliente
-                # en lugar de añadir un query param a la URL.
                 request.session['cliente_id'] = cliente.id
-                # Asumimos que la venta es del tipo que estaba activa.
                 tipo_venta = request.session.get('tipo_venta', 'mostrador')
                 return redirect('pos', tipo_venta=tipo_venta)
             

@@ -13,7 +13,9 @@
         <p><strong>Fecha:</strong> {{ pedido.fecha|date:"d/m/Y, H:i" }} hrs</p>
         <p><strong>Cliente:</strong> {{ pedido.cliente.nombre|default:"Mostrador" }}</p>
         <p><strong>Método de Pago:</strong> {{ pedido.metodo_pago }}</p>
-        <a href="{% url 'reimprimir-pedido' pedido.id %}" class="btn btn-secondary mt-2">Reimprimir Ticket</a>
+        
+        <button id="btn-reimprimir" class="btn btn-secondary mt-2">Reimprimir Ticket</button>
+        <div id="status-impresion" class="alert mt-2" style="display:none;"></div>
     </div>
 </div>
 
@@ -37,7 +39,7 @@
                     <td>{{ item.producto.nombre }}</td>
                     <td>{{ item.cantidad }}</td>
                     <td>${{ item.precio_unitario|floatformat:2 }}</td>
-                    <td>${% widthratio item.cantidad 1 item.precio_unitario %}</td>
+                    <td>${{ item.subtotal|floatformat:2 }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -45,4 +47,41 @@
         <h3 class="text-end mt-3">Total de la Venta: ${{ pedido.total|floatformat:2 }}</h3>
     </div>
 </div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const btnReimprimir = document.getElementById('btn-reimprimir');
+        const statusDiv = document.getElementById('status-impresion');
+        
+        btnReimprimir.addEventListener('click', function() {
+            // Muestra un mensaje de "Enviando..."
+            statusDiv.style.display = 'block';
+            statusDiv.className = 'alert alert-info';
+            statusDiv.textContent = 'Enviando ticket a la impresora...';
+            
+            const textoTicket = JSON.parse('{{ texto_del_ticket_json|escapejs }}');
+            const urlPuente = "{{ url_puente_impresora }}";
+            
+            fetch(urlPuente, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ticket_text: textoTicket, commands: ['cut'] })
+            })
+            .then(response => {
+                if (response.ok) {
+                    return response.json();
+                }
+                throw new Error('La respuesta de la red no fue exitosa.');
+            })
+            .then(data => {
+                statusDiv.className = 'alert alert-success';
+                statusDiv.textContent = '✅ Ticket enviado a la impresora con éxito.';
+            })
+            .catch((error) => {
+                statusDiv.className = 'alert alert-danger';
+                statusDiv.textContent = '❌ Error: No se pudo conectar con la impresora.';
+            });
+        });
+    });
+</script>
 {% endblock %}

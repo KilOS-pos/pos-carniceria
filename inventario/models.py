@@ -49,49 +49,7 @@ class Cliente(models.Model):
     def __str__(self):
         return f"{self.nombre} - {self.telefono}"
 
-class Pedido(models.Model):
-    empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE) # <-- NUEVO: El pedido pertenece a una empresa
-    METODO_PAGO_CHOICES = [
-        ('Efectivo', 'Efectivo'),
-        ('Tarjeta', 'Tarjeta'),
-    ]
-    cliente = models.ForeignKey(Cliente, on_delete=models.SET_NULL, null=True, blank=True)
-    fecha = models.DateTimeField(auto_now_add=True)
-    total = models.DecimalField(max_digits=10, decimal_places=2)
-    metodo_pago = models.CharField(max_length=10, choices=METODO_PAGO_CHOICES, default='Efectivo')
-    monto_recibido = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    cambio_entregado = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-
-    def __str__(self):
-        return f"Pedido #{self.id} del {self.fecha.strftime('%d/%m/%Y')} - Total: ${self.total}"
-
-class PedidoItem(models.Model):
-    # Este modelo no necesita el campo 'empresa' porque lo hereda a través del 'pedido'
-    pedido = models.ForeignKey(Pedido, related_name='items', on_delete=models.CASCADE)
-    producto = models.ForeignKey(Producto, on_delete=models.PROTECT)
-    cantidad = models.DecimalField(max_digits=10, decimal_places=3)
-    precio_unitario = models.DecimalField(max_digits=10, decimal_places=2)
-
-    def __str__(self):
-        return f"{self.cantidad} kg de {self.producto.nombre}"
-
-class Retiro(models.Model):
-    empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE) # <-- NUEVO: El retiro pertenece a una empresa
-    fecha = models.DateTimeField(default=timezone.now)
-    monto = models.DecimalField(max_digits=10, decimal_places=2)
-    concepto = models.CharField(max_length=255)
-
-    def __str__(self):
-        return f"Retiro de ${self.monto} el {self.fecha.strftime('%d/%m/%Y')} - {self.concepto}"
-
-class UserProfile(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
-    empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE)
-
-    def __str__(self):
-        return f"Perfil de {self.user.username} en {self.empresa.nombre}"
-
-class Arqueo(models.Model):
+class Arqueo(models.Model): # <-- MOVIMOS ARQUEO ANTES DE PEDIDO Y RETIRO
     empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE)
     fecha = models.DateField(default=timezone.now)
     ventas_efectivo = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
@@ -104,3 +62,49 @@ class Arqueo(models.Model):
 
     def __str__(self):
         return f"Arqueo del {self.fecha.strftime('%d/%m/%Y')} - {self.empresa.nombre}"
+
+class Pedido(models.Model):
+    empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE)
+    METODO_PAGO_CHOICES = [
+        ('Efectivo', 'Efectivo'),
+        ('Tarjeta', 'Tarjeta'),
+    ]
+    cliente = models.ForeignKey(Cliente, on_delete=models.SET_NULL, null=True, blank=True)
+    fecha = models.DateTimeField(auto_now_add=True)
+    total = models.DecimalField(max_digits=10, decimal_places=2)
+    metodo_pago = models.CharField(max_length=10, choices=METODO_PAGO_CHOICES, default='Efectivo')
+    monto_recibido = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    cambio_entregado = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    # --- CAMBIO IMPORTANTE ---
+    arqueo = models.ForeignKey(Arqueo, on_delete=models.SET_NULL, null=True, blank=True, related_name='pedidos')
+
+    def __str__(self):
+        return f"Pedido #{self.id} del {self.fecha.strftime('%d/%m/%Y')} - Total: ${self.total}"
+
+class PedidoItem(models.Model):
+    pedido = models.ForeignKey(Pedido, related_name='items', on_delete=models.CASCADE)
+    producto = models.ForeignKey(Producto, on_delete=models.PROTECT)
+    cantidad = models.DecimalField(max_digits=10, decimal_places=3)
+    precio_unitario = models.DecimalField(max_digits=10, decimal_places=2)
+
+    def __str__(self):
+        return f"{self.cantidad} kg de {self.producto.nombre}"
+
+class Retiro(models.Model):
+    empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE)
+    fecha = models.DateTimeField(default=timezone.now)
+    monto = models.DecimalField(max_digits=10, decimal_places=2)
+    concepto = models.CharField(max_length=255)
+    # --- CAMBIO IMPORTANTE ---
+    arqueo = models.ForeignKey(Arqueo, on_delete=models.SET_NULL, null=True, blank=True, related_name='retiros_del_arqueo')
+
+
+    def __str__(self):
+        return f"Retiro de ${self.monto} el {self.fecha.strftime('%d/%m/%Y')} - {self.concepto}"
+
+class UserProfile(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
+    empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE)
+
+    def __str__(self):
+        return f"Perfil de {self.user.username} en {self.empresa.nombre}"
