@@ -1,37 +1,141 @@
-{% extends "inventario/base.html" %}
+{% extends "inventario/base_sin_sidebar.html" %} 
+{% load static %}
 
-{% block title %}Iniciar Sesión{% endblock %}
+{% block title %}Ingresar - KilOS PDV{% endblock %}
 
 {% block content %}
-<div class="row">
-    <div class="col-md-5 mx-auto">
-        <div class="card card-body mt-5">
-            <h2 class="text-center">Iniciar Sesión</h2>
-            <p class="text-center text-muted">Ingresa a tu cuenta para administrar tu carnicería.</p>
+
+<style>
+    /* Estilos para asegurar que el layout ocupe toda la pantalla */
+    html, body {
+        height: 100%;
+        margin: 0;
+        overflow: hidden; /* Evita barras de scroll innecesarias */
+    }
+
+    /* Contenedor principal de dos columnas */
+    .login-container {
+        display: flex;
+        min-height: 100vh;
+        width: 100vw;
+    }
+
+    /* Columna Izquierda: Formulario */
+    .form-panel {
+        flex-basis: 40%;
+        max-width: 40%;
+        background-color: #ffffff;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 2rem;
+    }
+
+    .form-content {
+        width: 100%;
+        max-width: 400px;
+    }
+
+    /* Columna Derecha: Publicidad/Branding */
+    .ad-panel {
+        flex-grow: 1;
+        background: linear-gradient(135deg, #f5f7fa 0%, #e6e9f0 100%);
+    }
+
+    /* Estilos del formulario para que coincida con la imagen */
+    .form-content .logo {
+        font-size: 5rem;
+        font-weight: bold;
+        color: #1a253c; /* Un color tipo 'teal' similar al de la imagen */
+        margin-bottom: 1.5rem;
+    }
+
+    .form-content .form-control {
+        border-radius: 0.5rem;
+        padding: 0.9rem;
+        background-color: #f8f9fa;
+        border: 1px solid #e9ecef;
+    }
+
+    .form-content .btn-primary {
+        background-color: #1a253c;
+        border-color: #1a253c;
+        padding: 0.9rem;
+        font-weight: bold;
+        border-radius: 0.5rem;
+    }
+    
+    .form-content .btn-primary:hover {
+        background-color: #1a253c;
+        border-color: #1a253c;
+    }
+
+    .form-content a {
+        color: #1a253c;
+        text-decoration: none;
+    }
+    
+    .form-content .form-check-label {
+        font-size: 0.9rem;
+    }
+
+    .form-content .form-text a {
+        font-size: 0.9rem;
+    }
+
+    /* Diseño Responsivo para móviles */
+    @media (max-width: 992px) {
+        .ad-panel {
+            display: none; /* Ocultamos el panel derecho en pantallas pequeñas */
+        }
+        .form-panel {
+            flex-basis: 100%;
+            max-width: 100%;
+        }
+    }
+</style>
+
+<div class="login-container">
+    <div class="form-panel">
+        <div class="form-content">
+            <div class="logo">KilOS</div>
+            <h2 class="mb-2">Ingresa a tu cuenta</h2>
+            <p class="text-muted mb-4">
+                ¿No tienes una cuenta? <a href="{% url 'registro' %}">Regístrate</a> y pronto tú también serás grande.
+            </p>
 
             {% if form.errors %}
-                <div class="alert alert-danger text-center">
-                    Tu nombre de usuario y contraseña no coinciden. Por favor, inténtalo de nuevo.
+                <div class="alert alert-danger" role="alert">
+                    Tu usuario y contraseña no coinciden. Por favor, intenta de nuevo.
                 </div>
             {% endif %}
 
             <form method="post">
                 {% csrf_token %}
                 <div class="mb-3">
-                    <label for="id_username" class="form-label">Nombre de Usuario</label>
-                    <input type="text" name="username" id="id_username" class="form-control" required>
+                    <label for="{{ form.username.id_for_label }}" class="form-label">Email o Usuario</label>
+                    <input type="text" name="{{ form.username.name }}" class="form-control" id="{{ form.username.id_for_label }}" placeholder="Ingresa tu email o usuario" required>
                 </div>
                 <div class="mb-3">
-                    <label for="id_password" class="form-label">Contraseña</label>
-                    <input type="password" name="password" id="id_password" class="form-control" required>
+                    <label for="{{ form.password.id_for_label }}" class="form-label">Contraseña</label>
+                    <input type="password" name="{{ form.password.name }}" class="form-control" id="{{ form.password.id_for_label }}" placeholder="Ingresa tu contraseña" required>
                 </div>
-                <div class="d-grid mt-4">
-                    <button type="submit" class="btn btn-primary btn-lg">Entrar</button>
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="remember_me" id="rememberMe">
+                        <label class="form-check-label" for="rememberMe">
+                            Recordarme
+                        </label>
+                    </div>
+                    <div>
+                        <a href="#">¿Has olvidado tu contraseña?</a>
+                    </div>
                 </div>
+                <button type="submit" class="btn btn-primary w-100">Ingresar</button>
             </form>
-            <hr>
-            <p class="text-center">¿No tienes una cuenta? <a href="{% url 'registro' %}">Regístrate aquí</a>.</p>
         </div>
     </div>
+    <div class="ad-panel">
+        </div>
 </div>
 {% endblock %}

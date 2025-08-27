@@ -48,16 +48,26 @@ class RegistroForm(forms.Form):
         return cleaned_data
 
 class ProductoForm(forms.ModelForm):
+    # --- NUEVO MÉTODO __init__ ---
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Esta lógica se asegura de que el cambio solo aplique al crear un producto nuevo,
+        # no al editar uno existente.
+        if not self.instance.pk:
+            self.fields['requiere_stock'].initial = False
+    # --------------------------
+
     class Meta:
         model = Producto
-        # Excluimos 'empresa' porque la asignaremos automáticamente
-        fields = ['nombre', 'precio', 'stock', 'precio_mayoreo', 'mayoreo_desde_kg']
+        fields = ['nombre', 'precio', 'unidad_medida', 'requiere_stock', 'stock', 'precio_mayoreo', 'mayoreo_desde_kg']
         labels = {
-            'nombre': 'Nombre del Producto',
-            'precio': 'Precio de Venta por Kg',
-            'stock': 'Stock Inicial (Kg)',
+            'nombre': 'Nombre del Producto o Servicio',
+            'precio': 'Precio de Venta',
+            'stock': 'Stock Inicial (si aplica)',
             'precio_mayoreo': 'Precio de Mayoreo (Opcional)',
-            'mayoreo_desde_kg': 'Aplicar Mayoreo desde (Kg)',
+            'mayoreo_desde_kg': 'Aplicar Mayoreo desde (Kg/u)',
+            'unidad_medida': 'Se vende por',
+            'requiere_stock': '¿Controlar inventario de este producto?',
         }
         widgets = {
             'nombre': forms.TextInput(attrs={'class': 'form-control'}),
@@ -65,7 +75,10 @@ class ProductoForm(forms.ModelForm):
             'stock': forms.NumberInput(attrs={'class': 'form-control'}),
             'precio_mayoreo': forms.NumberInput(attrs={'class': 'form-control'}),
             'mayoreo_desde_kg': forms.NumberInput(attrs={'class': 'form-control'}),
+            'unidad_medida': forms.Select(attrs={'class': 'form-select'}),
+            'requiere_stock': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
+
 
 class ClienteForm(forms.ModelForm):
     class Meta:
@@ -80,4 +93,21 @@ class ClienteForm(forms.ModelForm):
             'nombre': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ej. Juan Pérez'}),
             'telefono': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ej. 3121234567'}),
             'direccion': forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': 'Ej. Calle 123, Colonia Centro, Ciudad, Estado'}),
+        }
+
+class ClienteDomicilioForm(forms.ModelForm):
+    # La dirección ahora es obligatoria a nivel de formulario
+    direccion = forms.CharField(label="Dirección (Obligatoria)", 
+                                max_length=255, 
+                                widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ej. Av. de la Tecnología #123'}))
+    class Meta:
+        model = Cliente
+        fields = ['nombre', 'telefono', 'direccion']
+        labels = {
+            'nombre': 'Nombre del Cliente',
+            'telefono': 'Teléfono',
+        }
+        widgets = {
+            'nombre': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ej. Juan Pérez'}),
+            'telefono': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ej. 312123...'}),
         }

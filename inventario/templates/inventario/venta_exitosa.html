@@ -3,32 +3,44 @@
 {% block title %}Venta #{{ pedido.id }} Exitosa{% endblock %}
 
 {% block content %}
-<div class="text-center p-5 mb-4 bg-white rounded-3 shadow-sm">
-    <h1 class="display-4 fw-bold mb-3">✅ Venta Finalizada</h1>
-    <p class="lead">El pedido #{{ pedido.id }} se ha registrado correctamente.</p>
-    <p>Enviando ticket a la impresora...</p>
-    
-    <div id="status-impresion" class="alert alert-info mt-4">
-        Contactando con el servicio de impresión local...
-    </div>
+<div class="container text-center">
+    <div class="card shadow-sm border-0 mx-auto" style="max-width: 500px;">
+        <div class="card-body p-5">
+            <i class="bi bi-check-circle-fill text-success" style="font-size: 5rem;"></i>
+            <h1 class="mt-3">¡Venta Exitosa!</h1>
+            <p class="lead">La venta #{{ pedido.id }} ha sido registrada correctamente.</p>
 
-    <div class="d-grid gap-2 d-md-flex justify-content-md-center mt-4">
-        <a href="{% url 'pagina-inicio' %}" class="btn btn-primary btn-lg">Nueva Venta</a>
-        <a href="{% url 'detalle-pedido' pedido.id %}" class="btn btn-secondary btn-lg">Ver Detalle del Pedido</a>
+            {% if pedido.metodo_pago == 'Efectivo' and pedido.cambio_entregado >= 0 %}
+            <div class="alert alert-info mt-4">
+                <h2 class="alert-heading">Cambio a entregar:</h2>
+                <p class="display-3 fw-bold">${{ pedido.cambio_entregado|floatformat:2 }}</p>
+            </div>
+            {% endif %}
+            
+            <div id="status-impresion" class="alert alert-info mt-4">
+                Enviando ticket a la impresora...
+            </div>
+
+            <hr class="my-4">
+
+            <div class="d-grid gap-2">
+                <a href="{% url 'pos' 'domicilio' %}" class="btn btn-primary btn-lg">Realizar Nueva Venta</a>
+                <a href="{% url 'detalle-pedido' pedido.id %}" class="btn btn-secondary btn-lg">Ver Detalle del Pedido</a>
+            </div>
+        </div>
     </div>
 </div>
 
 <script>
-    // Este script se ejecuta en el navegador del cliente en cuanto la página carga
+    // Tu script original para la impresión del ticket, ahora dentro del nuevo diseño.
     document.addEventListener("DOMContentLoaded", function() {
+        // Asegúrate de que la variable `texto_del_ticket_json` se está pasando desde tu vista `venta_exitosa`.
+        // Si no es así, necesitaríamos añadirla a la vista.
         const textoTicket = JSON.parse('{{ texto_del_ticket_json|escapejs }}');
         const statusDiv = document.getElementById('status-impresion');
 
-        // La URL es 127.0.0.1 porque el NAVEGADOR está en la misma
-        // computadora que el puente de la impresora.
         const urlPuente = "http://127.0.0.1:5000/print";
         
-        // Usamos fetch para enviar los datos al puente
         fetch(urlPuente, {
             method: 'POST',
             headers: {

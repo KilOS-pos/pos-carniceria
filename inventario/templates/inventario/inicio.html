@@ -1,0 +1,95 @@
+{% extends "inventario/base.html" %}
+{% load humanize %}
+
+{% block title %}Reporte de Ventas - {{ user.profile.empresa.nombre }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <div>
+            <h1 class="h2 mb-0">Reporte de Ventas</h1>
+            <p class="text-muted mb-0">{{ titulo_reporte }}</p>
+        </div>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div class="btn-group">
+            <a href="{% url 'pagina-inicio' %}?group_by=dia&time_range=7dias" class="btn {% if group_by == 'dia' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                Ver por Día
+            </a>
+            <a href="{% url 'pagina-inicio' %}?group_by=mes&time_range=3meses" class="btn {% if group_by == 'mes' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                Ver por Mes
+            </a>
+        </div>
+
+        {% if group_by == 'dia' %}
+        <div class="btn-group" role="group">
+            <a href="{% url 'pagina-inicio' %}?group_by=dia&time_range=hoy" class="btn btn-outline-secondary {% if time_range == 'hoy' %}active{% endif %}">Hoy</a>
+            <a href="{% url 'pagina-inicio' %}?group_by=dia&time_range=7dias" class="btn btn-outline-secondary {% if time_range == '7dias' %}active{% endif %}">Últimos 7 días</a>
+            <a href="{% url 'pagina-inicio' %}?group_by=dia&time_range=mes" class="btn btn-outline-secondary {% if time_range == 'mes' %}active{% endif %}">Último mes</a>
+        </div>
+        {% else %}
+        <div class="btn-group" role="group">
+            <a href="{% url 'pagina-inicio' %}?group_by=mes&time_range=3meses" class="btn btn-outline-secondary {% if time_range == '3meses' %}active{% endif %}">Últimos 3 meses</a>
+            <a href="{% url 'pagina-inicio' %}?group_by=mes&time_range=6meses" class="btn btn-outline-secondary {% if time_range == '6meses' %}active{% endif %}">Últimos 6 meses</a>
+            <a href="{% url 'pagina-inicio' %}?group_by=mes&time_range=9meses" class="btn btn-outline-secondary {% if time_range == '9meses' %}active{% endif %}">Últimos 9 meses</a>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="card shadow-sm border-0">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead class="table-light">
+                        <tr>
+                            <th scope="col">{% if group_by == 'mes' %}Mes{% else %}Fecha{% endif %}</th>
+                            <th scope="col">Ventas</th>
+                            <th scope="col">Ventas Totales <i class="bi bi-info-circle text-muted"></i></th>
+                            <th scope="col">Reembolsos <i class="bi bi-info-circle text-muted"></i></th>
+                            <th scope="col">Ventas Netas <i class="bi bi-info-circle text-muted"></i></th>
+                            <th scope="col">Costo <i class="bi bi-info-circle text-muted"></i></th>
+                            <th scope="col">Margen <i class="bi bi-info-circle text-muted"></i></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="fw-bold">
+                            <td>Total</td>
+                            <td>{{ totales.ventas }}</td>
+                            <td>${{ totales.ventas_totales|floatformat:2|intcomma }}</td>
+                            <td>${{ totales.reembolsos|floatformat:2|intcomma }}</td>
+                            <td>${{ totales.ventas_netas|floatformat:2|intcomma }}</td>
+                            <td>${{ totales.costo|floatformat:2|intcomma }}</td>
+                            <td>${{ totales.margen|floatformat:2|intcomma }}</td>
+                        </tr>
+                        
+                        {% for item in reporte_diario %}
+                        <tr>
+                            <td>
+                                {% if group_by == 'mes' %}
+                                    {{ item.fecha|date:"F Y"|capfirst }}
+                                {% else %}
+                                    {{ item.fecha|date:"d 'de' F" }}
+                                {% endif %}
+                            </td>
+                            <td>{{ item.ventas }}</td>
+                            <td>${{ item.ventas_totales|floatformat:2|intcomma }}</td>
+                            <td>${{ item.reembolsos|floatformat:2|intcomma }}</td>
+                            <td>${{ item.ventas_netas|floatformat:2|intcomma }}</td>
+                            <td>${{ item.costo|floatformat:2|intcomma }}</td>
+                            <td>${{ item.margen|floatformat:2|intcomma }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="text-center text-muted py-4">No hay datos de ventas en el período seleccionado.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

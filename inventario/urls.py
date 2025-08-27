@@ -6,7 +6,8 @@ from . import views
 
 urlpatterns = [
     # URL Principal
-    path('', views.pagina_inicio, name='pagina-inicio'),
+    path('', views.inicio_view, name='pagina-inicio'),
+    path('pos/<str:tipo_venta>/', views.lista_productos, name='pos'), # Nueva URL para el Punto de Venta
 
     # Autenticación
     path('registro/', views.registro_view, name='registro'),
@@ -14,7 +15,6 @@ urlpatterns = [
     path('logout/', auth_views.LogoutView.as_view(), name='logout'),
 
     # Punto de Venta (POS)
-    path('pos/<str:tipo_venta>/', views.lista_productos, name='lista-productos'),
     path('carrito/agregar/<int:producto_id>/', views.agregar_al_carrito, name='agregar-al-carrito'),
     path('carrito/eliminar/<int:producto_id>/', views.eliminar_del_carrito, name='eliminar-del-carrito'),
     path('carrito/actualizar/<int:producto_id>/', views.actualizar_cantidad, name='actualizar-cantidad'),
@@ -26,6 +26,8 @@ urlpatterns = [
     path('inventario/', views.gestion_inventario, name='gestion-inventario'),
     path('inventario/editar/<int:producto_id>/', views.editar_producto, name='editar-producto'),
     path('inventario/eliminar/<int:producto_id>/', views.eliminar_producto, name='eliminar-producto'),
+    path('inventario/reactivar/<int:producto_id>/', views.reactivar_producto, name='reactivar-producto'),
+    path('inventario/archivados/', views.lista_productos_archivados, name='lista-productos-archivados'),
 
     # Reportes y Gráficas
     path('reportes/', views.reporte_ventas, name='reporte-ventas'),

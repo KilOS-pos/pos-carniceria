@@ -1,113 +1,284 @@
 {% extends "inventario/base.html" %}
 
-{% block title %}Punto de Venta - Carnicería Moreno{% endblock %}
+{% block title %}Punto de Venta - KilOS{% endblock %}
 
 {% block content %}
-<div class="row">
-    <div class="col-md-5">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h2>🥩 Productos</h2>
+<style>
+    /*
+     * === ESTILOS DEFINITIVOS PARA EL SCROLL ===
+     */
+    .pos-panel {
+        /* Le damos una altura fija al panel completo, por ejemplo, el 78% de la altura visible de la ventana */
+        height: 78vh; 
+    }
+    .pos-panel > .card-body {
+        /* Hacemos que el contenido interno sea un contenedor flexible vertical */
+        display: flex;
+        flex-direction: column;
+        /* Le decimos que ocupe el 100% de la altura de su padre (.pos-panel) */
+        height: 100%;
+    }
+    .product-list-container, .cart-items-container {
+        /* Le decimos a estos contenedores: "ocupa todo el espacio vertical que sobre" */
+        flex-grow: 1;
+        /* Y si tu contenido es más alto que el espacio que tienes, muestra un scroll */
+        overflow-y: auto;
+        /* Un truco de Flexbox para evitar problemas de desbordamiento en algunos navegadores */
+        min-height: 0;
+    }
+    /* ===================================== */
+
+    /* Estilos para el interruptor */
+    .form-switch .form-check-input {
+        width: 3.5em;
+        height: 1.75em;
+    }
+    /* Añade un efecto suave al filtrar con List.js */
+    .list-group {
+        transition: all 0.3s ease;
+    }
+</style>
+
+<div class="row g-4">
+    <div class="col-lg-5" id="products-container">
+        <div class="card shadow-sm border-0 pos-panel">
+            <div class="card-body">
+                <div class="input-group input-group-lg mb-3">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input type="text" class="form-control search" placeholder="Buscar por nombre...">
+                </div>
+
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <a href="{% url 'gestion-inventario' %}" class="btn btn-outline-secondary w-100 p-3"><i class="bi bi-plus-circle me-2"></i>Crear producto</a>
+                    </div>
+                    <div class="col-6">
+                        <button type="button" class="btn btn-outline-secondary w-100 p-3" data-bs-toggle="modal" data-bs-target="#cajaModal">
+                            <i class="bi bi-cash-coin me-2"></i>Ver Resumen de Caja
+                        </button>
+                    </div>
+                </div>
+
+                <div class="product-list-container">
+                    <ul class="list-group list">
+                        {% for producto in productos %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-0 name">{{ producto.nombre }}</h6>
+                                <small class="text-muted">${{ producto.precio }}/{% if producto.unidad_medida == 'kg' %}Kg{% else %}u.{% endif %}</small>
+                            </div>
+                            <a class="btn btn-success btn-sm" href="{% url 'agregar-al-carrito' producto.id %}">
+                                <i class="bi bi-plus-lg"></i> Añadir
+                            </a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
         </div>
-        <table class="table table-bordered table-hover">
-            <thead class="table-light">
-                <tr>
-                    <th>Producto</th>
-                    <th>Precio/Kg</th>
-                    <th>Acción</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for producto in productos %}
-                <tr>
-                    <td>{{ producto.nombre }}</td>
-                    <td>${{ producto.precio }}</td>
-                    <td>
-                        <a class="btn btn-success btn-sm" href="{% url 'agregar-al-carrito' producto.id %}">Añadir</a>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
     </div>
 
-    <div class="col-md-7">
-        {% if tipo_venta == 'domicilio' %}
-             <h2 class="text-success">🛵 Cliente a Domicilio</h2>
-        {% else %}
-             <h2>🏢 Cliente de Mostrador (Opcional)</h2>
-        {% endif %}
-        {% if cliente_seleccionado %}
-            <div class="alert alert-success d-flex justify-content-between align-items-center">
-                <div>
-                    <strong>{{ cliente_seleccionado.nombre }}</strong><br>
-                    <small>{{ cliente_seleccionado.telefono }}</small>
+    <div class="col-lg-7">
+        <div class="card shadow-sm border-0 pos-panel">
+            <div class="card-body d-flex flex-column">
+                
+                <div class="form-check form-switch p-3 border rounded-3 mb-3 d-flex justify-content-between align-items-center">
+                    <label class="form-check-label h5 mb-0" for="domicilioSwitch">
+                        <i class="bi bi-bicycle me-2"></i>Servicio a Domicilio
+                    </label>
+                    <input class="form-check-input" type="checkbox" role="switch" id="domicilioSwitch" data-bs-toggle="collapse" data-bs-target="#customerCollapse" {% if busqueda_cliente or cliente_seleccionado %}checked{% endif %}>
                 </div>
-                <a href="{% url 'quitar-cliente' %}" class="btn-close"></a>
-            </div>
-        {% else %}
-            <form method="get" action="" class="mb-3">
-                <div class="input-group">
-                    <input type="text" name="buscar_cliente" class="form-control" placeholder="Buscar cliente por nombre o teléfono..." value="{{ busqueda_cliente }}">
-                    <button type="submit" class="btn btn-primary">Buscar</button>
-                </div>
-            </form>
 
-            {% if clientes_encontrados %}
-                <ul class="list-group">
-                    {% for cliente in clientes_encontrados %}
-                        <a href="{% url 'seleccionar-cliente' cliente.id %}" class="list-group-item list-group-item-action">{{ cliente.nombre }} - {{ cliente.telefono }}</a>
-                    {% empty %}
-                        <li class="list-group-item">No se encontraron clientes.</li>
-                    {% endfor %}
-                </ul>
-            {% elif busqueda_cliente %}
-                <div class="alert alert-info text-center">
-                    No se encontró el cliente con el término "{{ busqueda_cliente }}".
-                    <br>
-                    ¿Deseas registrar un nuevo cliente con este teléfono?
-                    <br>
-                    <a href="{% url 'agregar-cliente' %}?telefono={{ busqueda_cliente }}&next={{ request.path }}" class="btn btn-primary mt-2">Registrar Nuevo Cliente</a>
-                </div>
-            {% endif %}
-        {% endif %}
-
-        <h2 class="mt-4">🛒 Carrito</h2>
-        {% if items_del_carrito %}
-            <table class="table">
-                <thead class="table-light">
-                    <tr>
-                        <th>Producto</th>
-                        <th>Cantidad</th>
-                        <th>Subtotal</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for item in items_del_carrito %}
-                    <tr>
-                        <td>{{ item.producto.nombre }}</td>
-                        <td>
-                            <form action="{% url 'actualizar-cantidad' item.producto.id %}" method="post" class="d-flex gap-2">
-                                {% csrf_token %}
-                                <input type="number" name="cantidad" value="{{ item.cantidad }}" step="0.01" class="form-control form-control-sm" style="width: 80px;">
-                                <button type="submit" class="btn btn-primary btn-sm">OK</button>
+                <div class="collapse {% if busqueda_cliente or cliente_seleccionado %}show{% endif %}" id="customerCollapse">
+                    <div class="customer-section mb-3">
+                        <h5 class="mb-3">Añadir Cliente</h5>
+                        {% if cliente_seleccionado %}
+                            <div class="alert alert-success d-flex justify-content-between align-items-center p-2">
+                                <div>
+                                    <strong class="d-block"><i class="bi bi-person-check-fill me-2"></i>{{ cliente_seleccionado.nombre }}</strong>
+                                    <small class="text-muted ms-4">{{ cliente_seleccionado.telefono }}</small>
+                                </div>
+                                <a href="{% url 'quitar-cliente' %}" class="btn-close"></a>
+                            </div>
+                        {% else %}
+                            <form method="get" action="" class="mb-3">
+                                <div class="input-group">
+                                    <input type="text" name="buscar_cliente" class="form-control" placeholder="Buscar o añadir cliente por teléfono..." value="{{ busqueda_cliente }}">
+                                    <button type="submit" class="btn btn-primary">Buscar</button>
+                                </div>
                             </form>
-                        </td>
-                        <td>${{ item.subtotal|floatformat:2 }}</td>
-                        <td><a class="btn btn-danger btn-sm" href="{% url 'eliminar-del-carrito' item.producto.id %}">X</a></td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            <h3 class="text-end mt-3">TOTAL: ${{ total_carrito|floatformat:2 }}</h3>
+                            {% if clientes_encontrados %}
+                                <ul class="list-group">
+                                    {% for cliente in clientes_encontrados %}
+                                        <a href="{% url 'seleccionar-cliente' cliente.id %}" class="list-group-item list-group-item-action py-2">{{ cliente.nombre }} - {{ cliente.telefono }}</a>
+                                    {% endfor %}
+                                </ul>
+                            {% elif busqueda_cliente %}
+                                <div class="alert alert-info text-center p-2">
+                                    <p class="mb-0">No se encontró cliente.</p>
+                                    <a href="{% url 'agregar-cliente' %}?telefono={{ busqueda_cliente }}&next={{ request.path }}" class="fw-bold">Registrar Nuevo Cliente</a>
+                                </div>
+                            {% endif %}
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <hr>
 
-            <div class="d-flex gap-2 justify-content-end mt-3">
-                <a href="{% url 'finalizar-venta' 'Efectivo' %}" class="btn btn-success btn-lg">Cobrar en Efectivo</a>
-                <a href="{% url 'finalizar-venta' 'Tarjeta' %}" class="btn btn-info btn-lg">Cobrar con Tarjeta</a>
+                <div class="cart-items-container">
+                {% if items_del_carrito %}
+                    <ul class="list-group list-group-flush">
+                        {% for item in items_del_carrito %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-0">{{ item.producto.nombre }}</h6>
+                                <small class="text-muted">${{ item.subtotal|floatformat:2 }}</small>
+                            </div>
+                            <div class="d-flex align-items-center">
+                                <form action="{% url 'actualizar-cantidad' item.producto.id %}" method="post" class="d-flex gap-2">
+                                    {% csrf_token %}
+                                    <input type="number" name="cantidad" value="{{ item.cantidad }}" step="{% if item.producto.unidad_medida == 'kg' %}0.01{% else %}1{% endif %}" class="form-control form-control-sm" style="width: 80px;">
+                                    <button type="submit" class="btn btn-outline-primary btn-sm">OK</button>
+                                </form>
+                                <a class="btn btn-outline-danger btn-sm ms-2" href="{% url 'eliminar-del-carrito' item.producto.id %}"><i class="bi bi-trash"></i></a>
+                            </div>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <div class="text-center p-5 d-flex flex-column justify-content-center align-items-center h-100">
+                        <i class="bi bi-cart-x" style="font-size: 4rem; color: #ccc;"></i>
+                        <h4 class="mt-3 text-muted">Tu carrito está vacío</h4>
+                        <p class="text-muted">Agrega productos desde el panel izquierdo.</p>
+                    </div>
+                {% endif %}
+                </div>
             </div>
-        {% else %}
-            <div class="alert alert-secondary">El carrito está vacío.</div>
-        {% endif %}
+            
+            {% if items_del_carrito %}
+            <div class="card-footer bg-white border-0 mt-auto">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h3 class="mb-0">TOTAL:</h3>
+                    <h3 class="mb-0 fw-bold">${{ total_carrito|floatformat:2 }}</h3>
+                </div>
+            </div>
+            {% endif %}
+        </div>
     </div>
 </div>
+
+{% if items_del_carrito %}
+<div class="card shadow-sm border-0 mt-4">
+    <div class="card-body p-3">
+        <div class="d-flex justify-content-end gap-3">
+            <button class="btn btn-secondary btn-lg"><i class="bi bi-printer me-2"></i>Imprimir Ticket</button>
+            <button type="button" class="btn btn-success btn-lg flex-grow-1" data-bs-toggle="modal" data-bs-target="#efectivoModal">
+                <i class="bi bi-cash me-2"></i>Cobrar en Efectivo
+            </button>
+            <a href="{% url 'finalizar-venta' 'Tarjeta' %}" class="btn btn-info btn-lg flex-grow-1"><i class="bi bi-credit-card me-2"></i>Cobrar con Tarjeta</a>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+
+<div class="modal fade" id="cajaModal" tabindex="-1" aria-labelledby="cajaModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header border-0">
+                <h5 class="modal-title" id="cajaModalLabel"><i class="bi bi-wallet2 me-2"></i>Resumen de Caja del Día</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Ventas en Efectivo
+                        <span class="badge bg-success rounded-pill fs-6">${{ total_efectivo|floatformat:2 }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Ventas con Tarjeta
+                        <span class="badge bg-info rounded-pill fs-6">${{ total_tarjeta|floatformat:2 }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <strong>Total de Ventas del Día</strong>
+                        <strong>${{ total_ventas_dia|floatformat:2 }}</strong>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Retiros de Caja
+                        <span class="badge bg-danger rounded-pill fs-6">-${{ total_retiros|floatformat:2 }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center bg-light">
+                        <h4>Efectivo Esperado en Caja</h4>
+                        <h4 class="text-primary fw-bold">${{ efectivo_esperado|floatformat:2 }}</h4>
+                    </li>
+                </ul>
+            </div>
+            <div class="modal-footer border-0">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                <a href="{% url 'arqueo-caja' %}" class="btn btn-primary">Realizar Corte de Caja</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="efectivoModal" tabindex="-1" aria-labelledby="efectivoModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form action="{% url 'finalizar-venta' 'Efectivo' %}" method="POST">
+                {% csrf_token %}
+                <div class="modal-header border-0">
+                    <h5 class="modal-title" id="efectivoModalLabel"><i class="bi bi-cash-stack me-2"></i>Cobrar en Efectivo</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="text-center mb-3">
+                        <h1 class="display-4 fw-bold">Total: ${{ total_carrito|floatformat:2 }}</h1>
+                    </div>
+                    <div class="form-floating mb-3">
+                        <input type="number" class="form-control" id="monto_recibido" name="monto_recibido" placeholder="Ej. 500" step="0.01" required>
+                        <label for="monto_recibido">Cliente paga con:</label>
+                    </div>
+
+                    <div class="d-flex justify-content-center gap-2 mb-3">
+                        <button type="button" class="btn btn-outline-primary quick-cash-btn" data-value="50">$50</button>
+                        <button type="button" class="btn btn-outline-primary quick-cash-btn" data-value="100">$100</button>
+                        <button type="button" class="btn btn-outline-primary quick-cash-btn" data-value="200">$200</button>
+                        <button type="button" class="btn btn-outline-primary quick-cash-btn" data-value="500">$500</button>
+                    </div>
+
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success">Finalizar Venta</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // --- Lógica para los botones rápidos del modal de efectivo ---
+    const quickCashButtons = document.querySelectorAll('#efectivoModal .quick-cash-btn');
+    const amountInput = document.getElementById('monto_recibido');
+
+    if (quickCashButtons.length > 0 && amountInput) {
+        quickCashButtons.forEach(function(button) {
+            button.addEventListener('click', function() {
+                const value = this.getAttribute('data-value');
+                amountInput.value = value;
+            });
+        });
+    }
+
+    // --- NUEVA LÓGICA DE BÚSQUEDA CON LIST.JS ---
+    var options = {
+        valueNames: [ 'name' ] // Le dice a List.js que busque en los elementos con la clase 'name'
+    };
+
+    // Activa la búsqueda en el contenedor con id 'products-container'
+    var productList = new List('products-container', options);
+});
+</script>
+
 {% endblock %}

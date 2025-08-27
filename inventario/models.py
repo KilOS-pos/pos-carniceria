@@ -12,12 +12,30 @@ class Empresa(models.Model):
         return self.nombre
 
 class Producto(models.Model):
-    empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE) # <-- NUEVO: El producto pertenece a una empresa
-    nombre = models.CharField(max_length=100) # Ya no necesita ser 'unique' globalmente
+    # --- NUEVOS CAMPOS ---
+    UNIDAD_CHOICES = [
+        ('kg', 'Kilogramo (kg)'),
+        ('unidad', 'Unidad (u)'),
+    ]
+    
+    empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE)
+    nombre = models.CharField(max_length=100)
     precio = models.DecimalField(max_digits=10, decimal_places=2)
-    stock = models.DecimalField(max_digits=10, decimal_places=3)
+    costo = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, help_text="Costo de adquisición del producto por unidad/kg.")
+    
+    # El stock ahora puede ser nulo para servicios que no lo requieren
+    stock = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True)
+    
     precio_mayoreo = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     mayoreo_desde_kg = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True)
+    
+    # Define si se vende por peso o por pieza/servicio
+    unidad_medida = models.CharField(max_length=10, choices=UNIDAD_CHOICES, default='kg')
+    
+    # Define si este producto debe descontar existencias
+    requiere_stock = models.BooleanField(default=True)
+
+    is_active = models.BooleanField(default=True)
 
     def __str__(self):
         return self.nombre
@@ -41,6 +59,8 @@ class Pedido(models.Model):
     fecha = models.DateTimeField(auto_now_add=True)
     total = models.DecimalField(max_digits=10, decimal_places=2)
     metodo_pago = models.CharField(max_length=10, choices=METODO_PAGO_CHOICES, default='Efectivo')
+    monto_recibido = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    cambio_entregado = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
 
     def __str__(self):
         return f"Pedido #{self.id} del {self.fecha.strftime('%d/%m/%Y')} - Total: ${self.total}"

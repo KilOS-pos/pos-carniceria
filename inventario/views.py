@@ -1,18 +1,20 @@
+# inventario/views.py
+
 import json
-import requests
+import requests, locale
 from django.contrib import messages
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login
 from django.contrib.auth.models import User
 from django.contrib.auth.decorators import login_required
-from django.db.models import Q, Sum
+from django.db.models import Q, Sum, Count, F, DecimalField, ExpressionWrapper
 from .models import Producto, Pedido, PedidoItem, Cliente, Retiro, Empresa, UserProfile, Arqueo
 from decimal import Decimal
 from django.db import transaction
 from django.utils import timezone
 from datetime import datetime, timedelta
-from .forms import RetiroForm, RegistroForm, ProductoForm, ClienteForm
-from django.db.models.functions import TruncHour
+from .forms import RetiroForm, RegistroForm, ProductoForm, ClienteForm, ClienteDomicilioForm
+from django.db.models.functions import TruncDay, TruncHour, TruncMonth
 from .models import Arqueo
 
 # =================================================================================
@@ -37,9 +39,102 @@ def registro_view(request):
         form = RegistroForm()
     return render(request, 'inventario/registro.html', {'form': form})
 
+
+# inventario/views.py
+
 @login_required
-def pagina_inicio(request):
-    return render(request, 'inventario/pagina_inicio.html')
+def inicio_view(request):
+    try:
+        locale.setlocale(locale.LC_TIME, 'es_ES.UTF-8')
+    except (locale.Error, TypeError):
+        try:
+            locale.setlocale(locale.LC_TIME, 'Spanish')
+        except (locale.Error, TypeError):
+            pass
+
+    empresa_del_usuario = request.user.profile.empresa
+    hoy = timezone.localtime(timezone.now())
+
+    # --- NUEVA LÓGICA DE DOBLE FILTRO ---
+    group_by = request.GET.get('group_by', 'dia')
+    time_range = request.GET.get('time_range', '7dias')
+
+    if group_by == 'mes':
+        # Lógica si se agrupa por MES
+        trunc_func = TruncMonth('fecha')
+        if time_range == '6meses':
+            fecha_inicio = hoy - timedelta(days=180)
+            titulo_reporte = "Resumen de los Últimos 6 Meses"
+        elif time_range == '9meses':
+            fecha_inicio = hoy - timedelta(days=270)
+            titulo_reporte = "Resumen de los Últimos 9 Meses"
+        else:
+            time_range = '3meses' # Default para 'mes'
+            fecha_inicio = hoy - timedelta(days=90)
+            titulo_reporte = "Resumen de los Últimos 3 Meses"
+    else:
+        # Lógica si se agrupa por DÍA (default)
+        group_by = 'dia'
+        trunc_func = TruncDay('fecha')
+        if time_range == 'hoy':
+            fecha_inicio = hoy.replace(hour=0, minute=0, second=0, microsecond=0)
+            titulo_reporte = "Resumen del Día de Hoy"
+        elif time_range == 'mes':
+            fecha_inicio = hoy - timedelta(days=29)
+            titulo_reporte = "Resumen de los Últimos 30 Días"
+        else:
+            time_range = '7dias' # Default para 'dia'
+            fecha_inicio = hoy - timedelta(days=6)
+            titulo_reporte = "Resumen de los Últimos 7 Días"
+
+    # Consulta única que se adapta a los filtros
+    pedidos_agrupados = Pedido.objects.filter(
+        empresa=empresa_del_usuario,
+        fecha__gte=fecha_inicio
+    ).annotate(
+        periodo_agg=trunc_func
+    ).values('periodo_agg').annotate(
+        ventas_count=Count('id'),
+        ventas_totales=Sum('total'),
+        costo_total=Sum(F('items__cantidad') * F('items__producto__costo'), output_field=DecimalField())
+    ).order_by('-periodo_agg')
+
+    reporte_agrupado = []
+    for item in pedidos_agrupados:
+        reembolsos = Decimal('0.00')
+        ventas_netas = item['ventas_totales'] - reembolsos
+        costo_valido = item['costo_total'] or Decimal('0.00')
+        margen = ventas_netas - costo_valido
+        
+        reporte_agrupado.append({
+            'fecha': item['periodo_agg'],
+            'ventas': item['ventas_count'],
+            'ventas_totales': item['ventas_totales'],
+            'reembolsos': reembolsos,
+            'ventas_netas': ventas_netas,
+            'costo': costo_valido,
+            'margen': margen,
+        })
+
+    totales = {
+        'ventas': sum(item['ventas'] for item in reporte_agrupado),
+        'ventas_totales': sum(item['ventas_totales'] for item in reporte_agrupado),
+        'reembolsos': sum(item['reembolsos'] for item in reporte_agrupado),
+        'ventas_netas': sum(item['ventas_netas'] for item in reporte_agrupado),
+        'costo': sum(item['costo'] for item in reporte_agrupado),
+        'margen': sum(item['margen'] for item in reporte_agrupado),
+    }
+
+    contexto = {
+        'titulo_reporte': titulo_reporte,
+        'reporte_diario': reporte_agrupado,
+        'totales': totales,
+        'group_by': group_by,
+        'time_range': time_range,
+    }
+    
+    return render(request, 'inventario/inicio.html', contexto)
+
 
 # =================================================================================
 # VISTAS DEL PUNTO DE VENTA (POS)
@@ -48,36 +143,52 @@ def pagina_inicio(request):
 @login_required
 def lista_productos(request, tipo_venta):
     empresa_del_usuario = request.user.profile.empresa
+    
+    # 1. Lógica para manejar la sesión del tipo de venta
+    request.session['tipo_venta'] = tipo_venta
 
-    # 1. Lógica para seleccionar cliente automáticamente si viene de un registro
-    cliente_id_param = request.GET.get('cliente_id')
-    if cliente_id_param:
+    # 2. Lógica para manejar la selección o creación del cliente
+    cliente_seleccionado = None
+    if 'cliente_id' in request.session:
         try:
-            cliente_a_seleccionar = Cliente.objects.get(id=cliente_id_param, empresa=empresa_del_usuario)
-            request.session['cliente_id'] = cliente_a_seleccionar.id # <-- CORRECCIÓN
+            cliente_seleccionado = Cliente.objects.get(id=request.session['cliente_id'], empresa=empresa_del_usuario)
         except Cliente.DoesNotExist:
-            pass
+            del request.session['cliente_id']
+    
+    # 3. Determinar qué formulario de cliente usar
+    form_cliente = None # Inicializamos form_cliente
+    if tipo_venta == 'domicilio':
+        form_cliente = ClienteDomicilioForm()
 
-    # Lógica de búsqueda de cliente, si no hay uno seleccionado automáticamente
+    # 4. Procesar el formulario POST para agregar un nuevo cliente
+    if request.method == 'POST':
+        if 'guardar_cliente' in request.POST:
+            if tipo_venta == 'domicilio':
+                form_cliente = ClienteDomicilioForm(request.POST)
+            else:
+                form_cliente = ClienteForm(request.POST)
+
+            if form_cliente.is_valid():
+                nuevo_cliente = form_cliente.save(commit=False)
+                nuevo_cliente.empresa = empresa_del_usuario
+                nuevo_cliente.save()
+                request.session['cliente_id'] = nuevo_cliente.id
+                messages.success(request, f'Cliente "{nuevo_cliente.nombre}" agregado y seleccionado para la venta.')
+                return redirect('pos', tipo_venta=tipo_venta)
+            else:
+                messages.error(request, 'Hubo un error al guardar el cliente. Por favor, revisa los datos proporcionados.')
+
+    # 5. Lógica de búsqueda de cliente si no hay uno seleccionado
     busqueda_cliente = request.GET.get('buscar_cliente', '')
     clientes_encontrados = None
     if busqueda_cliente:
         clientes_encontrados = Cliente.objects.filter(
-            empresa=empresa_del_usuario,
-            nombre__icontains=busqueda_cliente
+            Q(nombre__icontains=busqueda_cliente) | Q(telefono__icontains=busqueda_cliente),
+            empresa=empresa_del_usuario
         ).order_by('nombre')
     
-    productos = Producto.objects.filter(empresa=empresa_del_usuario).order_by('nombre')
-    
-    # 2. Obtener el cliente seleccionado para la plantilla
-    cliente_seleccionado = None
-    cliente_id_sesion = request.session.get('cliente_id') # <-- CORRECCIÓN
-    if cliente_id_sesion:
-        try:
-            cliente_seleccionado = Cliente.objects.get(id=cliente_id_sesion, empresa=empresa_del_usuario)
-        except Cliente.DoesNotExist:
-            del request.session['cliente_id']
-
+    # 6. Obtener productos y carrito
+    productos = Producto.objects.filter(empresa=empresa_del_usuario, is_active=True).order_by('nombre') 
     carrito = request.session.get('carrito', {})
     items_del_carrito = []
     total_carrito = Decimal('0.00')
@@ -85,7 +196,6 @@ def lista_productos(request, tipo_venta):
     for producto_id, cantidad in carrito.items():
         producto = get_object_or_404(Producto, id=int(producto_id), empresa=empresa_del_usuario)
         
-        # Lógica de precio al mayoreo
         precio_unitario = producto.precio
         if producto.precio_mayoreo and producto.mayoreo_desde_kg and Decimal(str(cantidad)) >= producto.mayoreo_desde_kg:
             precio_unitario = producto.precio_mayoreo
@@ -98,8 +208,16 @@ def lista_productos(request, tipo_venta):
             'subtotal': subtotal
         })
 
-    # Guardar en la sesión para la finalización de la venta
-    request.session['total_venta'] = str(total_carrito)
+    # ### NUEVO BLOQUE DE CÓDIGO PARA OBTENER EL ESTADO DE LA CAJA ###
+    hoy = timezone.localtime(timezone.now()).date()
+    
+    total_efectivo = Pedido.objects.filter(empresa=empresa_del_usuario, fecha__date=hoy, metodo_pago='Efectivo').aggregate(Sum('total'))['total__sum'] or Decimal('0.00')
+    total_tarjeta = Pedido.objects.filter(empresa=empresa_del_usuario, fecha__date=hoy, metodo_pago='Tarjeta').aggregate(Sum('total'))['total__sum'] or Decimal('0.00')
+    total_retiros = Retiro.objects.filter(empresa=empresa_del_usuario, fecha__date=hoy).aggregate(Sum('monto'))['monto__sum'] or Decimal('0.00')
+    
+    efectivo_esperado = total_efectivo - total_retiros
+    total_ventas_dia = total_efectivo + total_tarjeta
+    # ### FIN DEL NUEVO BLOQUE DE CÓDIGO ###
 
     contexto = {
         'productos': productos,
@@ -109,9 +227,18 @@ def lista_productos(request, tipo_venta):
         'tipo_venta': tipo_venta,
         'items_del_carrito': items_del_carrito,
         'total_carrito': total_carrito,
+        'form_cliente': form_cliente,
+        # --- NUEVOS DATOS AÑADIDOS AL CONTEXTO ---
+        'total_efectivo': total_efectivo,
+        'total_tarjeta': total_tarjeta,
+        'total_retiros': total_retiros,
+        'efectivo_esperado': efectivo_esperado,
+        'total_ventas_dia': total_ventas_dia,
     }
     
     return render(request, 'inventario/lista_productos.html', contexto)
+
+
 @login_required
 def agregar_al_carrito(request, producto_id):
     empresa_del_usuario = request.user.profile.empresa
@@ -121,7 +248,7 @@ def agregar_al_carrito(request, producto_id):
     carrito[str(producto_id)] = cantidad
     request.session['carrito'] = carrito
     tipo_venta = request.session.get('tipo_venta', 'mostrador')
-    return redirect('lista-productos', tipo_venta=tipo_venta)
+    return redirect('pos', tipo_venta=tipo_venta)
 
 @login_required
 def eliminar_del_carrito(request, producto_id):
@@ -130,7 +257,7 @@ def eliminar_del_carrito(request, producto_id):
         del carrito[str(producto_id)]
     request.session['carrito'] = carrito
     tipo_venta = request.session.get('tipo_venta', 'mostrador')
-    return redirect('lista-productos', tipo_venta=tipo_venta)
+    return redirect('pos', tipo_venta=tipo_venta)
 
 @login_required
 def actualizar_cantidad(request, producto_id):
@@ -149,7 +276,7 @@ def actualizar_cantidad(request, producto_id):
             pass
     request.session['carrito'] = carrito
     tipo_venta = request.session.get('tipo_venta', 'mostrador')
-    return redirect('lista-productos', tipo_venta=tipo_venta)
+    return redirect('pos', tipo_venta=tipo_venta)
 
 @login_required
 def seleccionar_cliente(request, cliente_id):
@@ -157,28 +284,14 @@ def seleccionar_cliente(request, cliente_id):
     cliente = get_object_or_404(Cliente, id=cliente_id, empresa=empresa_del_usuario)
     request.session['cliente_id'] = cliente.id
     tipo_venta = request.session.get('tipo_venta', 'mostrador')
-    return redirect('lista-productos', tipo_venta=tipo_venta)
+    return redirect('pos', tipo_venta=tipo_venta)
 
 @login_required
 def quitar_cliente(request):
     if 'cliente_id' in request.session:
         del request.session['cliente_id']
     tipo_venta = request.session.get('tipo_venta', 'mostrador')
-    return redirect('lista-productos', tipo_venta=tipo_venta)
-
-# inventario/views.py
-
-# inventario/views.py
-
-# Asegúrate de tener estas importaciones al inicio de tu archivo views.py
-from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib import messages
-from django.contrib.auth.decorators import login_required
-from django.db import transaction
-from .models import Producto, Pedido, PedidoItem, Cliente
-from decimal import Decimal
-
-# ... (el resto de tus vistas) ...
+    return redirect('pos', tipo_venta=tipo_venta)
 
 @login_required
 @transaction.atomic
@@ -189,27 +302,13 @@ def finalizar_venta(request, metodo_pago):
 
     if not carrito:
         messages.warning(request, 'El carrito está vacío.')
-        return redirect('pagina-inicio')
-
-    if tipo_venta == 'domicilio' and 'cliente_id' not in request.session:
-        messages.error(request, 'Para ventas a domicilio, es obligatorio seleccionar un cliente.')
-        return redirect('lista-productos', tipo_venta=tipo_venta)
-
-    cliente = None
-    if 'cliente_id' in request.session:
-        cliente = get_object_or_404(Cliente, id=request.session['cliente_id'], empresa=empresa_del_usuario)
+        return redirect('pos', tipo_venta=tipo_venta)
 
     total_final = Decimal('0.00')
     items_para_procesar = []
-    
-    # Validar stock y calcular totales antes de crear el pedido
     for producto_id, cantidad in carrito.items():
         producto = get_object_or_404(Producto, id=int(producto_id), empresa=empresa_del_usuario)
         cantidad_decimal = Decimal(str(cantidad))
-        
-        if producto.stock < cantidad_decimal:
-            messages.error(request, f'No hay suficiente stock para {producto.nombre}. Venta cancelada.')
-            return redirect('lista-productos', tipo_venta=tipo_venta)
         
         precio_unitario_final = producto.precio
         if producto.precio_mayoreo and producto.mayoreo_desde_kg and cantidad_decimal >= producto.mayoreo_desde_kg:
@@ -222,43 +321,73 @@ def finalizar_venta(request, metodo_pago):
         })
         total_final += precio_unitario_final * cantidad_decimal
 
-    # Crear el pedido en la base de datos
-    pedido = Pedido.objects.create(
-        empresa=empresa_del_usuario, 
-        total=total_final, 
-        cliente=cliente, 
-        metodo_pago=metodo_pago
-    )
-
-    # Crear los items del pedido y descontar el stock
+    # --- VALIDACIÓN DE STOCK ANTES DE CREAR EL PEDIDO ---
     for item in items_para_procesar:
-        PedidoItem.objects.create(
-            pedido=pedido, 
-            producto=item['producto'], 
-            cantidad=item['cantidad'], 
-            precio_unitario=item['precio_unitario']
-        )
-        # Actualizar stock del producto
-        producto_a_actualizar = item['producto']
-        producto_a_actualizar.stock -= item['cantidad']
-        producto_a_actualizar.save()
+        producto = item['producto']
+        cantidad = item['cantidad']
+        if producto.requiere_stock:
+            if producto.stock is None:
+                messages.error(request, f'El producto "{producto.nombre}" requiere stock, pero no tiene un valor definido. Venta cancelada.')
+                return redirect('pos', tipo_venta=tipo_venta)
+            if producto.stock < cantidad:
+                messages.error(request, f'No hay suficiente stock para "{producto.nombre}" ({producto.stock} disponible). Venta cancelada.')
+                return redirect('pos', tipo_venta=tipo_venta)
+    # --- FIN DE LA VALIDACIÓN DE STOCK ---
 
-    # --- CAMBIO PRINCIPAL ---
-    # Se elimina por completo el bloque try/except que intentaba imprimir desde el servidor.
-    # La impresión ahora es responsabilidad del cliente (navegador).
-    
-    # Limpiar la sesión
-    del request.session['carrito']
+    cliente = None
     if 'cliente_id' in request.session:
-        del request.session['cliente_id']
-    if 'tipo_venta' in request.session:
-        del request.session['tipo_venta']
+        cliente = get_object_or_404(Cliente, id=request.session['cliente_id'], empresa=empresa_del_usuario)
+    
+    pedido = None
+
+    if metodo_pago == 'Tarjeta':
+        pedido = Pedido.objects.create(empresa=empresa_del_usuario, total=total_final, cliente=cliente, metodo_pago='Tarjeta')
+    elif metodo_pago == 'Efectivo':
+        if request.method != 'POST':
+            messages.error(request, 'Acción no permitida para pagos en efectivo.')
+            return redirect('pos', tipo_venta=tipo_venta)
+
+        monto_recibido_str = request.POST.get('monto_recibido')
+        if monto_recibido_str is None or monto_recibido_str.strip() == '':
+            messages.error(request, 'No se ingresó un monto recibido. Venta cancelada.')
+            return redirect('pos', tipo_venta=tipo_venta)
+
+        try:
+            monto_recibido = Decimal(monto_recibido_str)
+        except:
+            messages.error(request, 'El monto recibido no es un número válido.')
+            return redirect('pos', tipo_venta=tipo_venta)
         
-    messages.success(request, f'Venta #{pedido.id} registrada con éxito.')
+        if monto_recibido < total_final:
+            messages.error(request, 'El monto recibido es menor que el total de la venta.')
+            return redirect('pos', tipo_venta=tipo_venta)
+        
+        cambio = monto_recibido - total_final
+        pedido = Pedido.objects.create(
+            empresa=empresa_del_usuario, total=total_final, cliente=cliente, 
+            metodo_pago='Efectivo', monto_recibido=monto_recibido, cambio_entregado=cambio
+        )
 
-    # Redirigir a la nueva página de éxito que activará la impresión en el cliente.
-    return redirect('venta-exitosa', pedido_id=pedido.id)
+    if pedido:
+        for item in items_para_procesar:
+            PedidoItem.objects.create(
+                pedido=pedido, producto=item['producto'], 
+                cantidad=item['cantidad'], precio_unitario=item['precio_unitario']
+            )
+            # La resta de stock ahora es segura gracias a la validación previa
+            if item['producto'].requiere_stock:
+                item['producto'].stock -= item['cantidad']
+                item['producto'].save()
 
+        del request.session['carrito']
+        if 'cliente_id' in request.session: del request.session['cliente_id']
+        if 'tipo_venta' in request.session: del request.session['tipo_venta']
+            
+        messages.success(request, f'Venta #{pedido.id} registrada con éxito.')
+        return redirect('venta-exitosa', pedido_id=pedido.id)
+    else:
+        messages.error(request, 'No se pudo procesar la venta.')
+        return redirect('pos', tipo_venta=tipo_venta)
 
 
 # =================================================================================
@@ -278,7 +407,7 @@ def gestion_inventario(request):
             return redirect('gestion-inventario')
     else:
         form = ProductoForm()
-    productos_de_la_empresa = Producto.objects.filter(empresa=empresa_del_usuario).order_by('nombre')
+    productos_de_la_empresa = Producto.objects.filter(empresa=empresa_del_usuario, is_active=True).order_by('nombre')
     contexto = {'form': form, 'productos': productos_de_la_empresa}
     return render(request, 'inventario/gestion_inventario.html', contexto)
 
@@ -301,13 +430,34 @@ def editar_producto(request, producto_id):
 def eliminar_producto(request, producto_id):
     empresa_del_usuario = request.user.profile.empresa
     producto = get_object_or_404(Producto, id=producto_id, empresa=empresa_del_usuario)
-    if request.method == 'POST':
-        nombre_producto = producto.nombre
-        producto.delete()
-        messages.success(request, f'Producto "{nombre_producto}" eliminado correctamente.')
-        return redirect('gestion-inventario')
+    
+    # La nueva lógica: en lugar de borrar, se desactiva el producto.
+    producto.is_active = False
+    producto.save()
+    
+    messages.success(request, f'El producto "{producto.nombre}" ha sido desactivado correctamente.')
+    return redirect('gestion-inventario')
     contexto = {'producto': producto}
     return render(request, 'inventario/producto_confirm_delete.html', contexto)
+
+@login_required
+def reactivar_producto(request, producto_id):
+    empresa_del_usuario = request.user.profile.empresa
+    producto = get_object_or_404(Producto, id=producto_id, empresa=empresa_del_usuario)
+    producto.is_active = True
+    producto.save()
+    messages.success(request, f'El producto "{producto.nombre}" ha sido reactivado.')
+    return redirect('gestion-inventario')
+
+@login_required
+def lista_productos_archivados(request):
+    empresa_del_usuario = request.user.profile.empresa
+    # Buscamos únicamente los productos que están marcados como inactivos (is_active=False)
+    productos_archivados = Producto.objects.filter(empresa=empresa_del_usuario, is_active=False).order_by('nombre')
+    contexto = {
+        'productos': productos_archivados,
+    }
+    return render(request, 'inventario/productos_archivados.html', contexto)
 
 # =================================================================================
 # VISTAS DE REPORTES Y GRÁFICAS
@@ -755,7 +905,12 @@ def agregar_cliente(request):
             # Redirigir a la URL de origen si existe, de lo contrario, a la gestión de clientes
             # La variable next_url contendrá la URL de la página de venta
             if next_url != 'gestion-clientes':
-                return redirect(f'{next_url}?cliente_id={cliente.id}')
+                # CORRECCIÓN: redirigir a la vista de POS ('pos') y seleccionar el cliente
+                # en lugar de añadir un query param a la URL.
+                request.session['cliente_id'] = cliente.id
+                # Asumimos que la venta es del tipo que estaba activa.
+                tipo_venta = request.session.get('tipo_venta', 'mostrador')
+                return redirect('pos', tipo_venta=tipo_venta)
             
             return redirect(next_url)
     else:
