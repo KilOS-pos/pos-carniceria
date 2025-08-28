@@ -1,12 +1,30 @@
 {% extends "inventario/base.html" %}
+{% load static %}
 
 {% block title %}Punto de Venta - KilOS{% endblock %}
 
 {% block content %}
 <style>
-    /*
-     * === ESTILOS DEFINITIVOS PARA EL SCROLL ===
-     */
+
+    .payment-buttons-container {
+       /* Propiedades para la animación */
+       transition: opacity 0.3s ease, transform 0.3s ease;
+    
+       /* Estado inicial (oculto) */
+       opacity: 0;
+       transform: translateY(20px); /* Empieza 20px más abajo */
+       visibility: hidden;
+    }
+
+    .payment-buttons-container.visible {
+       /* Estado final (visible) */
+       opacity: 1;
+       transform: translateY(0); /* Vuelve a su posición original */
+       visibility: visible;
+    }
+       /*
+        * === ESTILOS DEFINITIVOS PARA EL SCROLL ===
+        */
     .pos-panel {
         /* Le damos una altura fija al panel completo, por ejemplo, el 78% de la altura visible de la ventana */
         height: 78vh;
@@ -38,10 +56,6 @@
         transition: all 0.3s ease;
     }
 
-    /* Oculta los botones de pago por defecto, y JS los mostrará */
-    .payment-buttons-container {
-        display: none;
-    }
 </style>
 
 <div class="row g-4">
@@ -72,8 +86,12 @@
                                 <h6 class="mb-0 name">{{ producto.nombre }}</h6>
                                 <small class="text-muted">${{ producto.precio }}/{% if producto.unidad_medida == 'kg' %}Kg{% else %}u.{% endif %}</small>
                             </div>
-                            <button class="btn btn-success btn-sm add-to-cart-btn" data-product-id="{{ producto.id }}">
-                                <i class="bi bi-plus-lg"></i> Añadir
+                            <button class="btn btn-success btn-sm add-to-cart-btn"
+                                  data-product-id="{{ producto.id }}"
+                                  data-nombre="{{ producto.nombre }}"
+                                  data-precio="{{ producto.precio }}"
+                                  data-unidad-medida="{{ producto.unidad_medida }}">
+                              <i class="bi bi-plus-lg"></i> Añadir
                             </button>
                         </li>
                         {% endfor %}
@@ -169,20 +187,28 @@
     </div>
 </div>
 
-<div class="card shadow-sm border-0 mt-4 payment-buttons-container">
-    <div class="card-body p-3">
-        <div class="d-flex justify-content-end gap-3">
-            <button id="btn-imprimir-status" class="btn btn-light btn-lg flex-grow-1" disabled>
-                <i class="bi bi-printer me-2"></i>
-                <span id="printer-status-text">Cargando estado...</span>
-            </button>
-            <button type="button" class="btn btn-success btn-lg flex-grow-1" data-bs-toggle="modal" data-bs-target="#efectivoModal">
-                <i class="bi bi-cash me-2"></i>Cobrar en Efectivo
-            </button>
-            <a href="{% url 'finalizar-venta' 'Tarjeta' %}" class="btn btn-info btn-lg flex-grow-1"><i class="bi bi-credit-card me-2"></i>Cobrar con Tarjeta</a>
+<div class="row mt-4 gx-4 align-items-center">
+    
+    <div class="col-md-5">
+       <button id="btn-imprimir-status" class="btn btn-light btn-lg w-100" disabled>
+          <i class="bi bi-printer me-2"></i>
+          <span id="printer-status-text">Cargando estado...</span>
+       </button>
+    </div>
+
+    <div class="col-md-7">
+    <div class="card shadow-sm border-0 payment-buttons-container {% if items_del_carrito %}visible{% endif %}">
+        <div class="card-body p-3">
+            <div class="d-flex justify-content-end gap-3">
+                <button type="button" class="btn btn-success btn-lg flex-grow-1" data-bs-toggle="modal" data-bs-target="#efectivoModal">
+                    <i class="bi bi-cash me-2"></i>Cobrar en Efectivo
+                </button>
+                <a href="{% url 'finalizar-venta' 'Tarjeta' %}" class="btn btn-info btn-lg flex-grow-1"><i class="bi bi-credit-card me-2"></i>Cobrar con Tarjeta</a>
+            </div>
         </div>
     </div>
 </div>
+
 
 
 <div class="modal fade" id="cajaModal" tabindex="-1" aria-labelledby="cajaModalLabel" aria-hidden="true">
@@ -235,7 +261,7 @@
                 </div>
                 <div class="modal-body">
                     <div class="text-center mb-3">
-                        <h1 class="display-4 fw-bold">Total: ${{ total_carrito|floatformat:2 }}</h1>
+                        <h1 class="display-4 fw-bold" id="efectivoModalTotal">Total: ${{ total_carrito|floatformat:2 }}</h1>
                     </div>
                     <div class="form-floating mb-3">
                         <input type="number" class="form-control" id="monto_recibido" name="monto_recibido" placeholder="Ej. 500" step="0.01" required>
@@ -273,7 +299,8 @@
                     <li>
                         <strong>Descarga el programa puente:</strong>
                         <p>Haz clic en el siguiente enlace para descargar el archivo `puente_impresora_setup.exe`.</p>
-                        <a href="#" class="btn btn-primary" download>Descargar programa puente</a>
+
+                        <a href="{% static 'downloads/puente_impresora_setup.exe' %}" class="btn btn-primary" download>Descargar programa puente</a>
                     </li>
                     <li>
                         <strong>Instala y ejecuta el programa:</strong>
@@ -296,42 +323,58 @@
     </div>
 </div>
 
+<div class="modal fade" id="kgModal" tabindex="-1" aria-labelledby="kgModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="kgModalLabel">Añadir Producto por Peso</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <h4 id="kgModalProductName" class="mb-3 text-center">Nombre del Producto</h4>
+                <p class="text-center text-muted">Precio: $<span id="kgModalPricePerKg">0.00</span> por Kg</p>
+                <div class="form-floating mb-3">
+                    <input type="number" class="form-control" id="kgModalWeight" placeholder="0.000" step="0.001" min="0">
+                    <label for="kgModalWeight">Kilos (Kg)</label>
+                </div>
+                <div class="form-floating">
+                    <input type="number" class="form-control" id="kgModalPrice" placeholder="0.00" step="0.01" min="0">
+                    <label for="kgModalPrice">Precio Total ($)</label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="kgModalAddToCartBtn">Añadir al Carrito</button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // --- Lógica para los botones rápidos del modal de efectivo ---
-    const quickCashButtons = document.querySelectorAll('#efectivoModal .quick-cash-btn');
-    const amountInput = document.getElementById('monto_recibido');
-
-    if (quickCashButtons.length > 0 && amountInput) {
-        quickCashButtons.forEach(function(button) {
-            button.addEventListener('click', function() {
-                const value = this.getAttribute('data-value');
-                amountInput.value = value;
-            });
-        });
+    // --- REFERENCIAS A ELEMENTOS ---
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]') ? document.querySelector('[name=csrfmiddlewaretoken]').value : '';
+    const cartItemsContainer = document.querySelector('.cart-items-container');
+    const productListContainer = document.getElementById('products-container');
+    
+    // --- LÓGICA DE BÚSQUEDA ---
+    if (productListContainer) {
+        var options = { valueNames: [ 'name' ] };
+        var productList = new List('products-container', options);
     }
 
-    // --- LÓGICA DE BÚSQUEDA CON LIST.JS ---
-    var options = {
-        valueNames: [ 'name' ]
-    };
-    var productList = new List('products-container', options);
-
-    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
-    const paymentButtonsContainer = document.querySelector('.payment-buttons-container');
-    const cartItemsContainer = document.querySelector('.cart-items-container');
-
+    // --- FUNCIÓN PARA ACTUALIZAR LA INTERFAZ DEL CARRITO ---
     function updateCartUI(data) {
         const totalElement = document.getElementById('total-carrito');
+        const efectivoModalTotalElement = document.getElementById('efectivoModalTotal');
+        const paymentButtonsContainer = document.querySelector('.payment-buttons-container');
         let cartHtml = '';
 
-        if (data.items.length > 0) {
-            if (paymentButtonsContainer) {
-                paymentButtonsContainer.style.display = 'block';
-            }
+        if (data.items && data.items.length > 0) {
+            if (paymentButtonsContainer) paymentButtonsContainer.classList.add('visible');
             cartHtml = '<ul class="list-group list-group-flush">';
             data.items.forEach(item => {
+                const stepValue = item.unidad_medida === 'kg' ? '0.01' : '1';
                 cartHtml += `
                     <li class="list-group-item d-flex justify-content-between align-items-center" data-cart-item-id="${item.id}">
                         <div>
@@ -340,7 +383,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         </div>
                         <div class="d-flex align-items-center">
                             <form class="d-flex gap-2">
-                                <input type="number" name="cantidad" value="${item.cantidad}" step="0.01" class="form-control form-control-sm cart-item-qty" style="width: 80px;" data-item-id="${item.id}">
+                                <input type="number" name="cantidad" value="${item.cantidad}" step="${stepValue}" class="form-control form-control-sm cart-item-qty" style="width: 80px;" data-item-id="${item.id}">
                             </form>
                             <a class="btn btn-outline-danger btn-sm ms-2 remove-from-cart-btn" data-product-id="${item.id}"><i class="bi bi-trash"></i></a>
                         </div>
@@ -349,10 +392,8 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             cartHtml += '</ul>';
         } else {
-            if (paymentButtonsContainer) {
-                paymentButtonsContainer.style.display = 'none';
-            }
-             cartHtml = `
+            if (paymentButtonsContainer) paymentButtonsContainer.classList.remove('visible');
+            cartHtml = `
                 <div class="text-center p-5 d-flex flex-column justify-content-center align-items-center h-100">
                     <i class="bi bi-cart-x" style="font-size: 4rem; color: #ccc;"></i>
                     <h4 class="mt-3 text-muted">Tu carrito está vacío</h4>
@@ -360,140 +401,168 @@ document.addEventListener('DOMContentLoaded', function() {
                 </div>
             `;
         }
-
-        cartItemsContainer.innerHTML = cartHtml;
-        if (totalElement) {
-            totalElement.textContent = `$${data.total.toFixed(2)}`;
-        }
+        
+        if (cartItemsContainer) cartItemsContainer.innerHTML = cartHtml;
+        
+        const totalFormatted = data.total ? `$${data.total.toFixed(2)}` : '$0.00';
+        const modalTotalFormatted = data.total ? `Total: $${data.total.toFixed(2)}` : 'Total: $0.00';
+        
+        if (totalElement) totalElement.textContent = totalFormatted;
+        if (efectivoModalTotalElement) efectivoModalTotalElement.textContent = modalTotalFormatted;
     }
 
-    // --- LÓGICA PRINCIPAL DE DELEGACIÓN DE EVENTOS ---
-    document.addEventListener('click', function(e) {
-        // Lógica para el botón de AÑADIR
-        if (e.target.closest('.add-to-cart-btn')) {
-            e.preventDefault();
-            const button = e.target.closest('.add-to-cart-btn');
-            const productId = button.dataset.productId;
-            const url = `/carrito/agregar/${productId}/`;
-            fetch(url, {
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': csrfToken,
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({})
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    updateCartUI(data);
-                } else {
-                    alert('Error al agregar al carrito: ' + data.message);
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('Ocurrió un error de red.');
-            });
-        }
-        
-        // Lógica para el botón de ELIMINAR
-        if (e.target.closest('.remove-from-cart-btn')) {
-            e.preventDefault();
-            const button = e.target.closest('.remove-from-cart-btn');
-            const productId = button.dataset.productId;
-            const url = `/carrito/eliminar/${productId}/`;
-            fetch(url, {
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': csrfToken,
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({})
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    updateCartUI(data);
-                } else {
-                    alert('Error al eliminar del carrito: ' + data.message);
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('Ocurrió un error de red.');
-            });
-        }
-    });
+    // --- LÓGICA DEL MODAL DE KG ---
+    const kgModalEl = document.getElementById('kgModal');
+    if (kgModalEl) {
+        const kgModal = new bootstrap.Modal(kgModalEl);
+        const kgModalProductName = document.getElementById('kgModalProductName');
+        const kgModalPricePerKg = document.getElementById('kgModalPricePerKg');
+        const kgModalWeightInput = document.getElementById('kgModalWeight');
+        const kgModalPriceInput = document.getElementById('kgModalPrice');
+        const kgModalAddToCartBtn = document.getElementById('kgModalAddToCartBtn');
+        let pricePerKg = 0;
+        let isUpdating = false;
 
-    // --- Lógica para el cambio en el input de cantidad ---
-    cartItemsContainer.addEventListener('change', function(e) {
-        if (e.target.classList.contains('cart-item-qty')) {
-            const input = e.target;
-            const productId = input.dataset.itemId;
-            const cantidad = input.value;
+        kgModalWeightInput.addEventListener('input', () => {
+            if (isUpdating) return;
+            isUpdating = true;
+            const weight = parseFloat(kgModalWeightInput.value) || 0;
+            kgModalPriceInput.value = (weight * pricePerKg).toFixed(2);
+            isUpdating = false;
+        });
+
+        kgModalPriceInput.addEventListener('input', () => {
+            if (isUpdating) return;
+            isUpdating = true;
+            const price = parseFloat(kgModalPriceInput.value) || 0;
+            if (pricePerKg > 0) kgModalWeightInput.value = (price / pricePerKg).toFixed(3);
+            isUpdating = false;
+        });
+
+        kgModalAddToCartBtn.addEventListener('click', () => {
+            const productId = kgModalEl.dataset.productId;
+            const cantidad = kgModalWeightInput.value;
+            if (parseFloat(cantidad) <= 0 || !productId) return;
             const url = `/carrito/actualizar/${productId}/`;
             fetch(url, {
                 method: 'POST',
-                headers: {
-                    'X-CSRFToken': csrfToken,
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ cantidad: cantidad })
-            })
-            .then(response => response.json())
-            .then(data => {
+                headers: { 'X-CSRFToken': csrfToken, 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cantidad: cantidad, mode: 'add' })
+            }).then(res => res.json()).then(data => {
                 if (data.success) {
                     updateCartUI(data);
-                } else {
-                    alert('Error al actualizar cantidad: ' + data.message);
+                    kgModal.hide();
                 }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('Ocurrió un error de red.');
-            });
-        }
-    });
-
-
-    // --- NUEVA LÓGICA PARA EL BOTÓN DE ESTADO DE LA IMPRESORA ---
-    const btnImprimirStatus = document.getElementById('btn-imprimir-status');
-    const printerStatusText = document.getElementById('printer-status-text');
-    const urlPuente = "{{ url_puente_impresora }}";
-
-    function checkPrinterStatus() {
-        fetch(urlPuente, { method: 'OPTIONS' })
-        .then(response => {
-            if (response.ok) {
-                // Impresora conectada y el servicio está corriendo
-                btnImprimirStatus.classList.remove('btn-danger');
-                btnImprimirStatus.classList.add('btn-success');
-                printerStatusText.textContent = "Conectada ✅";
-                btnImprimirStatus.disabled = true;
-                btnImprimirStatus.removeAttribute('data-bs-toggle');
-                btnImprimirStatus.removeAttribute('data-bs-target');
-            } else {
-                throw new Error("Servicio no disponible");
+            }).catch(console.error);
+        });
+        
+        function handleEnterKey(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                kgModalAddToCartBtn.click();
             }
-        })
-        .catch(error => {
-            // Impresora no conectada
-            btnImprimirStatus.classList.remove('btn-success');
-            btnImprimirStatus.classList.add('btn-danger');
-            printerStatusText.textContent = "Conectar Impresora";
-            btnImprimirStatus.disabled = false;
-            btnImprimirStatus.setAttribute('data-bs-toggle', 'modal');
-            btnImprimirStatus.setAttribute('data-bs-target', '#installationModal');
+        }
+        kgModalWeightInput.addEventListener('keydown', handleEnterKey);
+        kgModalPriceInput.addEventListener('keydown', handleEnterKey);
+
+        kgModalEl.addEventListener('hidden.bs.modal', () => {
+            kgModalWeightInput.value = '';
+            kgModalPriceInput.value = '';
+            kgModalEl.dataset.productId = '';
+            pricePerKg = 0;
         });
     }
 
-    // Verifica el estado inicial y cada 10 segundos
-    checkPrinterStatus();
-    setInterval(checkPrinterStatus, 10000); // 10 segundos
+    // --- DELEGACIÓN DE EVENTOS PRINCIPAL ---
+    document.body.addEventListener('click', function(e) {
+        const addToCartBtn = e.target.closest('.add-to-cart-btn');
+        const removeFromCartBtn = e.target.closest('.remove-from-cart-btn');
+
+        if (addToCartBtn) {
+            e.preventDefault();
+            const { productId, unidadMedida, nombre, precio } = addToCartBtn.dataset;
+            if (unidadMedida === 'kg') {
+                pricePerKg = parseFloat(precio);
+                kgModalProductName.textContent = nombre;
+                kgModalPricePerKg.textContent = pricePerKg.toFixed(2);
+                kgModalEl.dataset.productId = productId;
+                const modal = bootstrap.Modal.getInstance(kgModalEl) || new bootstrap.Modal(kgModalEl);
+                modal.show();
+                setTimeout(() => kgModalWeightInput.focus(), 500);
+            } else {
+                const url = `/carrito/agregar/${productId}/`;
+                fetch(url, { method: 'POST', headers: { 'X-CSRFToken': csrfToken, 'X-Requested-With': 'XMLHttpRequest' }})
+                .then(res => res.json()).then(updateCartUI).catch(console.error);
+            }
+        }
+
+        if (removeFromCartBtn) {
+            e.preventDefault();
+            const { productId } = removeFromCartBtn.dataset;
+            const url = `/carrito/eliminar/${productId}/`;
+            fetch(url, { method: 'POST', headers: { 'X-CSRFToken': csrfToken, 'X-Requested-With': 'XMLHttpRequest' }})
+            .then(res => res.json()).then(updateCartUI).catch(console.error);
+        }
+    });
+
+    if(cartItemsContainer) {
+        cartItemsContainer.addEventListener('change', e => {
+            if (e.target.classList.contains('cart-item-qty')) {
+                const { itemId } = e.target.dataset;
+                const url = `/carrito/actualizar/${itemId}/`;
+                fetch(url, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': csrfToken, 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cantidad: e.target.value })
+                }).then(res => res.json()).then(updateCartUI).catch(console.error);
+            }
+        });
+        cartItemsContainer.addEventListener('submit', e => e.preventDefault());
+    }
+
+    // --- LÓGICA DEL BOTÓN DE ESTADO DE LA IMPRESORA (MÉTODO ROBUSTO) ---
+    const btnImprimirStatus = document.getElementById('btn-imprimir-status');
+    if(btnImprimirStatus) {
+        const printerStatusText = document.getElementById('printer-status-text');
+        // APUNTAMOS A LA NUEVA RUTA /STATUS
+        const statusUrl = "http://127.0.0.1:5000/status";
+
+        const checkPrinterStatus = async () => {
+            try {
+                const urlWithCacheBust = `${statusUrl}?t=${new Date().getTime()}`;
+                const response = await fetch(urlWithCacheBust, { method: 'GET' });
+
+                if (response.ok) {
+                    btnImprimirStatus.classList.remove('btn-danger', 'btn-light');
+                    btnImprimirStatus.classList.add('btn-success');
+                    printerStatusText.textContent = "Conectada ✅";
+                    btnImprimirStatus.disabled = true;
+                    btnImprimirStatus.removeAttribute('data-bs-toggle');
+                } else {
+                    throw new Error("Servicio no OK");
+                }
+            } catch (error) {
+                btnImprimirStatus.classList.remove('btn-success');
+                btnImprimirStatus.classList.add('btn-danger');
+                printerStatusText.textContent = "Conectar Impresora";
+                btnImprimirStatus.disabled = false;
+                btnImprimirStatus.setAttribute('data-bs-toggle', 'modal');
+                btnImprimirStatus.setAttribute('data-bs-target', '#installationModal');
+            }
+        };
+
+        checkPrinterStatus();
+        setInterval(checkPrinterStatus, 5000);
+    }
+    
+    // --- Lógica para botones rápidos de efectivo ---
+    const quickCashButtons = document.querySelectorAll('#efectivoModal .quick-cash-btn');
+    const amountInput = document.getElementById('monto_recibido');
+    if (quickCashButtons.length > 0 && amountInput) {
+        quickCashButtons.forEach(button => {
+            button.addEventListener('click', () => amountInput.value = button.dataset.value);
+        });
+    }
 });
 </script>
 

@@ -70,6 +70,13 @@ def print_ticket():
         print(error_message)
         return jsonify({"status": "error", "message": error_message}), 500
 
+@app.route('/status', methods=['GET'])
+def status_check():
+    """
+    Una ruta simple para verificar que el servidor está activo.
+    """
+    return jsonify({"status": "ok", "message": "Servicio de impresión activo"}), 200
+
 if __name__ == '__main__':
     if not acquire_lock():
         print("Otra instancia del programa ya se está ejecutando. Terminando...")

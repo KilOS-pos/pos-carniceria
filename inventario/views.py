@@ -10,7 +10,7 @@ from django.contrib.auth.models import User
 from django.contrib.auth.decorators import login_required
 from django.db.models import Q, Sum, Count, F, DecimalField, ExpressionWrapper
 from .models import Producto, Pedido, PedidoItem, Cliente, Retiro, Empresa, UserProfile, Arqueo
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from django.db import transaction
 from django.utils import timezone
 from datetime import datetime, timedelta
@@ -258,17 +258,22 @@ def lista_productos(request, tipo_venta):
     return render(request, 'inventario/lista_productos.html', contexto)
 
 
+# Asegúrate de tener esta importación al inicio de tu archivo views.py
+from decimal import Decimal
+
+@login_required
 def agregar_al_carrito(request, producto_id):
     empresa_del_usuario = request.user.profile.empresa
     producto = get_object_or_404(Producto, id=producto_id, empresa=empresa_del_usuario)
     carrito = request.session.get('carrito', {})
-    cantidad = carrito.get(str(producto_id), 0) + 1
-    carrito[str(producto_id)] = cantidad
+    cantidad_actual = Decimal(carrito.get(str(producto_id), '0'))
+    nueva_cantidad = cantidad_actual + Decimal('1')
+    carrito[str(producto_id)] = str(nueva_cantidad)
     request.session['carrito'] = carrito
+    request.session.modified = True
 
-    # === CAMBIO CLAVE ===
+    # Responde con JSON si la petición es AJAX (hecha con JavaScript)
     if request.headers.get('x-requested-with') == 'XMLHttpRequest':
-        # Si la solicitud es AJAX, devuelve una respuesta JSON
         items_del_carrito, total_carrito = _obtener_datos_carrito(request)
         return JsonResponse({
             'success': True,
@@ -277,11 +282,18 @@ def agregar_al_carrito(request, producto_id):
                     'id': item['producto'].id,
                     'nombre': item['producto'].nombre,
                     'cantidad': float(item['cantidad']),
-                    'subtotal': float(item['subtotal'])
+                    'subtotal': float(item['subtotal']),
+                    'unidad_medida': item['producto'].unidad_medida,
                 } for item in items_del_carrito
             ],
             'total': float(total_carrito)
         })
+    
+    # Redirige si es una petición normal (aunque con la interfaz actual, casi nunca se usará)
+    tipo_venta = request.session.get('tipo_venta', 'mostrador')
+    return redirect('pos', tipo_venta=tipo_venta)
+
+
     # ====================
     
     # Si no es AJAX, sigue con el comportamiento de redirección
@@ -318,6 +330,7 @@ def eliminar_del_carrito(request, producto_id):
     if str(producto_id) in carrito:
         del carrito[str(producto_id)]
     request.session['carrito'] = carrito
+    request.session.modified = True
 
     # === CAMBIO CLAVE ===
     if request.headers.get('x-requested-with') == 'XMLHttpRequest':
@@ -330,7 +343,8 @@ def eliminar_del_carrito(request, producto_id):
                     'id': item['producto'].id,
                     'nombre': item['producto'].nombre,
                     'cantidad': float(item['cantidad']),
-                    'subtotal': float(item['subtotal'])
+                    'subtotal': float(item['subtotal']),
+                    'unidad_medida': item['producto'].unidad_medida
                 } for item in items_del_carrito
             ],
             'total': float(total_carrito)
@@ -345,20 +359,69 @@ def eliminar_del_carrito(request, producto_id):
 def actualizar_cantidad(request, producto_id):
     carrito = request.session.get('carrito', {})
     producto_id_str = str(producto_id)
-    if request.method == 'POST':
-        cantidad_str = request.POST.get('cantidad', '0')
+
+    # Si es una petición AJAX (hecha con JavaScript)
+    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
         try:
-            cantidad = float(cantidad_str)
-            if cantidad > 0:
-                carrito[producto_id_str] = cantidad
+            data = json.loads(request.body)
+            cantidad_str = data.get('cantidad', '0')
+            mode = data.get('mode', 'replace')
+            
+            cantidad_nueva = Decimal(cantidad_str)
+
+            if mode == 'add':
+                # MODO SUMA: Obtenemos la cantidad actual y le sumamos la nueva
+                cantidad_actual = Decimal(carrito.get(producto_id_str, '0'))
+                cantidad_total = cantidad_actual + cantidad_nueva
+                carrito[producto_id_str] = str(cantidad_total)
             else:
-                if producto_id_str in carrito:
+                # MODO REEMPLAZO (comportamiento anterior)
+                if cantidad_nueva > 0:
+                    carrito[producto_id_str] = str(cantidad_nueva)
+                elif producto_id_str in carrito:
                     del carrito[producto_id_str]
-        except ValueError:
-            pass
-    request.session['carrito'] = carrito
-    tipo_venta = request.session.get('tipo_venta', 'mostrador')
-    return redirect('pos', tipo_venta=tipo_venta)
+
+        except (InvalidOperation, json.JSONDecodeError):
+            return JsonResponse({'success': False, 'message': 'Cantidad inválida.'}, status=400)
+
+        request.session['carrito'] = carrito
+        # Forzamos el guardado de la sesión para evitar el error del total en cero
+        request.session.modified = True
+        
+        items_del_carrito, total_carrito = _obtener_datos_carrito(request)
+        return JsonResponse({
+            'success': True,
+            'items': [
+                {
+                    'id': item['producto'].id,
+                    'nombre': item['producto'].nombre,
+                    'cantidad': float(item['cantidad']),
+                    'subtotal': float(item['subtotal']),
+                    'unidad_medida': item['producto'].unidad_medida
+                } for item in items_del_carrito
+            ],
+            'total': float(total_carrito)
+        })
+
+    # Comportamiento para peticiones no-AJAX (fallback)
+    else:
+        if request.method == 'POST':
+            cantidad_str = request.POST.get('cantidad', '0')
+            try:
+                cantidad = float(cantidad_str)
+                if cantidad > 0:
+                    carrito[producto_id_str] = cantidad
+                elif producto_id_str in carrito:
+                    del carrito[producto_id_str]
+            except ValueError:
+                pass
+        
+        request.session['carrito'] = carrito
+        # Forzamos el guardado de la sesión aquí también
+        request.session.modified = True
+
+        tipo_venta = request.session.get('tipo_venta', 'mostrador')
+        return redirect('pos', tipo_venta=tipo_venta)
 
 @login_required
 def seleccionar_cliente(request, cliente_id):

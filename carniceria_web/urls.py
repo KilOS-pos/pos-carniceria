@@ -1,9 +1,16 @@
 # carniceria_web/urls.py
 
 from django.contrib import admin
-from django.urls import path, include  # Importamos 'include'
+from django.urls import path, include
+from django.conf import settings
+from django.conf.urls.static import static
 
 urlpatterns = [
-    path('admin/', admin.site.urls),          # Esta línea es para el panel de admin
-    path('', include('inventario.urls')),   # Esta conecta con tu lista de productos
+    path('admin/', admin.site.urls),
+    path('', include('inventario.urls')),
 ]
+
+# --- LÍNEA MODIFICADA ---
+# Esta configuración es la estándar y más robusta para el modo de desarrollo.
+if settings.DEBUG:
+    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
