@@ -19,5 +19,6 @@ staticfiles/
 .vscode/
 .idea/
 
-# Archivos de staticfiles (se generan en producción)
-staticfiles/
+# Directorios de archivos estáticos y media
+/staticfiles/
+/media/
