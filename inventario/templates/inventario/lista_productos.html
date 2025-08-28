@@ -9,7 +9,7 @@
      */
     .pos-panel {
         /* Le damos una altura fija al panel completo, por ejemplo, el 78% de la altura visible de la ventana */
-        height: 78vh; 
+        height: 78vh;
     }
     .pos-panel > .card-body {
         /* Hacemos que el contenido interno sea un contenedor flexible vertical */
@@ -36,6 +36,11 @@
     /* Añade un efecto suave al filtrar con List.js */
     .list-group {
         transition: all 0.3s ease;
+    }
+
+    /* Oculta los botones de pago por defecto, y JS los mostrará */
+    .payment-buttons-container {
+        display: none;
     }
 </style>
 
@@ -67,9 +72,9 @@
                                 <h6 class="mb-0 name">{{ producto.nombre }}</h6>
                                 <small class="text-muted">${{ producto.precio }}/{% if producto.unidad_medida == 'kg' %}Kg{% else %}u.{% endif %}</small>
                             </div>
-                            <a class="btn btn-success btn-sm" href="{% url 'agregar-al-carrito' producto.id %}">
+                            <button class="btn btn-success btn-sm add-to-cart-btn" data-product-id="{{ producto.id }}">
                                 <i class="bi bi-plus-lg"></i> Añadir
-                            </a>
+                            </button>
                         </li>
                         {% endfor %}
                     </ul>
@@ -126,52 +131,51 @@
                 <hr>
 
                 <div class="cart-items-container">
-                {% if items_del_carrito %}
-                    <ul class="list-group list-group-flush">
-                        {% for item in items_del_carrito %}
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            <div>
-                                <h6 class="mb-0">{{ item.producto.nombre }}</h6>
-                                <small class="text-muted">${{ item.subtotal|floatformat:2 }}</small>
-                            </div>
-                            <div class="d-flex align-items-center">
-                                <form action="{% url 'actualizar-cantidad' item.producto.id %}" method="post" class="d-flex gap-2">
-                                    {% csrf_token %}
-                                    <input type="number" name="cantidad" value="{{ item.cantidad }}" step="{% if item.producto.unidad_medida == 'kg' %}0.01{% else %}1{% endif %}" class="form-control form-control-sm" style="width: 80px;">
-                                    <button type="submit" class="btn btn-outline-primary btn-sm">OK</button>
-                                </form>
-                                <a class="btn btn-outline-danger btn-sm ms-2" href="{% url 'eliminar-del-carrito' item.producto.id %}"><i class="bi bi-trash"></i></a>
-                            </div>
-                        </li>
-                        {% endfor %}
-                    </ul>
-                {% else %}
-                    <div class="text-center p-5 d-flex flex-column justify-content-center align-items-center h-100">
-                        <i class="bi bi-cart-x" style="font-size: 4rem; color: #ccc;"></i>
-                        <h4 class="mt-3 text-muted">Tu carrito está vacío</h4>
-                        <p class="text-muted">Agrega productos desde el panel izquierdo.</p>
-                    </div>
-                {% endif %}
+                    {% if items_del_carrito %}
+                        <ul class="list-group list-group-flush">
+                            {% for item in items_del_carrito %}
+                            <li class="list-group-item d-flex justify-content-between align-items-center" data-cart-item-id="{{ item.producto.id }}">
+                                <div>
+                                    <h6 class="mb-0">{{ item.producto.nombre }}</h6>
+                                    <small class="text-muted subtotal">${{ item.subtotal|floatformat:2 }}</small>
+                                </div>
+                                <div class="d-flex align-items-center">
+                                    <form class="d-flex gap-2">
+                                        {% csrf_token %}
+                                        <input type="number" name="cantidad" value="{{ item.cantidad }}" step="{% if item.producto.unidad_medida == 'kg' %}0.01{% else %}1{% endif %}" class="form-control form-control-sm cart-item-qty" style="width: 80px;" data-item-id="{{ item.producto.id }}">
+                                    </form>
+                                    <a class="btn btn-outline-danger btn-sm ms-2 remove-from-cart-btn" data-product-id="{{ item.producto.id }}"><i class="bi bi-trash"></i></a>
+                                </div>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <div class="text-center p-5 d-flex flex-column justify-content-center align-items-center h-100">
+                            <i class="bi bi-cart-x" style="font-size: 4rem; color: #ccc;"></i>
+                            <h4 class="mt-3 text-muted">Tu carrito está vacío</h4>
+                            <p class="text-muted">Agrega productos desde el panel izquierdo.</p>
+                        </div>
+                    {% endif %}
                 </div>
             </div>
             
-            {% if items_del_carrito %}
             <div class="card-footer bg-white border-0 mt-auto">
                 <div class="d-flex justify-content-between align-items-center">
                     <h3 class="mb-0">TOTAL:</h3>
-                    <h3 class="mb-0 fw-bold">${{ total_carrito|floatformat:2 }}</h3>
+                    <h3 class="mb-0 fw-bold" id="total-carrito">${{ total_carrito|floatformat:2 }}</h3>
                 </div>
             </div>
-            {% endif %}
         </div>
     </div>
 </div>
 
-{% if items_del_carrito %}
-<div class="card shadow-sm border-0 mt-4">
+<div class="card shadow-sm border-0 mt-4 payment-buttons-container">
     <div class="card-body p-3">
         <div class="d-flex justify-content-end gap-3">
-            <button class="btn btn-secondary btn-lg"><i class="bi bi-printer me-2"></i>Imprimir Ticket</button>
+            <button id="btn-imprimir-status" class="btn btn-light btn-lg flex-grow-1" disabled>
+                <i class="bi bi-printer me-2"></i>
+                <span id="printer-status-text">Cargando estado...</span>
+            </button>
             <button type="button" class="btn btn-success btn-lg flex-grow-1" data-bs-toggle="modal" data-bs-target="#efectivoModal">
                 <i class="bi bi-cash me-2"></i>Cobrar en Efectivo
             </button>
@@ -179,7 +183,6 @@
         </div>
     </div>
 </div>
-{% endif %}
 
 
 <div class="modal fade" id="cajaModal" tabindex="-1" aria-labelledby="cajaModalLabel" aria-hidden="true">
@@ -256,6 +259,44 @@
     </div>
 </div>
 
+
+<div class="modal fade" id="installationModal" tabindex="-1" aria-labelledby="installationModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="installationModalLabel">🔌 Conectar Impresora de Tickets</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Para conectar tu impresora de tickets, sigue estos sencillos pasos:</p>
+                <ol>
+                    <li>
+                        <strong>Descarga el programa puente:</strong>
+                        <p>Haz clic en el siguiente enlace para descargar el archivo `puente_impresora_setup.exe`.</p>
+                        <a href="#" class="btn btn-primary" download>Descargar programa puente</a>
+                    </li>
+                    <li>
+                        <strong>Instala y ejecuta el programa:</strong>
+                        <p>Ejecuta el archivo descargado. Windows puede mostrar una advertencia de seguridad, haz clic en "Más información" y luego en "Ejecutar de todos modos".</p>
+                    </li>
+                    <li>
+                        <strong>Verifica la conexión:</strong>
+                        <p>Una vez que el programa esté en ejecución, el botón de la impresora en el Punto de Venta cambiará a "Impresora Conectada".</p>
+                    </li>
+                </ol>
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle me-2"></i>
+                    Recuerda que el programa puente debe estar siempre activo en tu computadora para poder imprimir tickets.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     // --- Lógica para los botones rápidos del modal de efectivo ---
@@ -271,13 +312,188 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // --- NUEVA LÓGICA DE BÚSQUEDA CON LIST.JS ---
+    // --- LÓGICA DE BÚSQUEDA CON LIST.JS ---
     var options = {
-        valueNames: [ 'name' ] // Le dice a List.js que busque en los elementos con la clase 'name'
+        valueNames: [ 'name' ]
     };
-
-    // Activa la búsqueda en el contenedor con id 'products-container'
     var productList = new List('products-container', options);
+
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+    const paymentButtonsContainer = document.querySelector('.payment-buttons-container');
+    const cartItemsContainer = document.querySelector('.cart-items-container');
+
+    function updateCartUI(data) {
+        const totalElement = document.getElementById('total-carrito');
+        let cartHtml = '';
+
+        if (data.items.length > 0) {
+            if (paymentButtonsContainer) {
+                paymentButtonsContainer.style.display = 'block';
+            }
+            cartHtml = '<ul class="list-group list-group-flush">';
+            data.items.forEach(item => {
+                cartHtml += `
+                    <li class="list-group-item d-flex justify-content-between align-items-center" data-cart-item-id="${item.id}">
+                        <div>
+                            <h6 class="mb-0">${item.nombre}</h6>
+                            <small class="text-muted subtotal">$${item.subtotal.toFixed(2)}</small>
+                        </div>
+                        <div class="d-flex align-items-center">
+                            <form class="d-flex gap-2">
+                                <input type="number" name="cantidad" value="${item.cantidad}" step="0.01" class="form-control form-control-sm cart-item-qty" style="width: 80px;" data-item-id="${item.id}">
+                            </form>
+                            <a class="btn btn-outline-danger btn-sm ms-2 remove-from-cart-btn" data-product-id="${item.id}"><i class="bi bi-trash"></i></a>
+                        </div>
+                    </li>
+                `;
+            });
+            cartHtml += '</ul>';
+        } else {
+            if (paymentButtonsContainer) {
+                paymentButtonsContainer.style.display = 'none';
+            }
+             cartHtml = `
+                <div class="text-center p-5 d-flex flex-column justify-content-center align-items-center h-100">
+                    <i class="bi bi-cart-x" style="font-size: 4rem; color: #ccc;"></i>
+                    <h4 class="mt-3 text-muted">Tu carrito está vacío</h4>
+                    <p class="text-muted">Agrega productos desde el panel izquierdo.</p>
+                </div>
+            `;
+        }
+
+        cartItemsContainer.innerHTML = cartHtml;
+        if (totalElement) {
+            totalElement.textContent = `$${data.total.toFixed(2)}`;
+        }
+    }
+
+    // --- LÓGICA PRINCIPAL DE DELEGACIÓN DE EVENTOS ---
+    document.addEventListener('click', function(e) {
+        // Lógica para el botón de AÑADIR
+        if (e.target.closest('.add-to-cart-btn')) {
+            e.preventDefault();
+            const button = e.target.closest('.add-to-cart-btn');
+            const productId = button.dataset.productId;
+            const url = `/carrito/agregar/${productId}/`;
+            fetch(url, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken,
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({})
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    updateCartUI(data);
+                } else {
+                    alert('Error al agregar al carrito: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Ocurrió un error de red.');
+            });
+        }
+        
+        // Lógica para el botón de ELIMINAR
+        if (e.target.closest('.remove-from-cart-btn')) {
+            e.preventDefault();
+            const button = e.target.closest('.remove-from-cart-btn');
+            const productId = button.dataset.productId;
+            const url = `/carrito/eliminar/${productId}/`;
+            fetch(url, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken,
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({})
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    updateCartUI(data);
+                } else {
+                    alert('Error al eliminar del carrito: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Ocurrió un error de red.');
+            });
+        }
+    });
+
+    // --- Lógica para el cambio en el input de cantidad ---
+    cartItemsContainer.addEventListener('change', function(e) {
+        if (e.target.classList.contains('cart-item-qty')) {
+            const input = e.target;
+            const productId = input.dataset.itemId;
+            const cantidad = input.value;
+            const url = `/carrito/actualizar/${productId}/`;
+            fetch(url, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken,
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ cantidad: cantidad })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    updateCartUI(data);
+                } else {
+                    alert('Error al actualizar cantidad: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Ocurrió un error de red.');
+            });
+        }
+    });
+
+
+    // --- NUEVA LÓGICA PARA EL BOTÓN DE ESTADO DE LA IMPRESORA ---
+    const btnImprimirStatus = document.getElementById('btn-imprimir-status');
+    const printerStatusText = document.getElementById('printer-status-text');
+    const urlPuente = "{{ url_puente_impresora }}";
+
+    function checkPrinterStatus() {
+        fetch(urlPuente, { method: 'OPTIONS' })
+        .then(response => {
+            if (response.ok) {
+                // Impresora conectada y el servicio está corriendo
+                btnImprimirStatus.classList.remove('btn-danger');
+                btnImprimirStatus.classList.add('btn-success');
+                printerStatusText.textContent = "Conectada ✅";
+                btnImprimirStatus.disabled = true;
+                btnImprimirStatus.removeAttribute('data-bs-toggle');
+                btnImprimirStatus.removeAttribute('data-bs-target');
+            } else {
+                throw new Error("Servicio no disponible");
+            }
+        })
+        .catch(error => {
+            // Impresora no conectada
+            btnImprimirStatus.classList.remove('btn-success');
+            btnImprimirStatus.classList.add('btn-danger');
+            printerStatusText.textContent = "Conectar Impresora";
+            btnImprimirStatus.disabled = false;
+            btnImprimirStatus.setAttribute('data-bs-toggle', 'modal');
+            btnImprimirStatus.setAttribute('data-bs-target', '#installationModal');
+        });
+    }
+
+    // Verifica el estado inicial y cada 10 segundos
+    checkPrinterStatus();
+    setInterval(checkPrinterStatus, 10000); // 10 segundos
 });
 </script>
 

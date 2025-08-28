@@ -1,14 +1,20 @@
-# Entornos virtuales
-/venv/
-/env/
+# Entorno Virtual
+venv/
+env/
 
-# Archivos de Python
+# Base de datos de desarrollo
+db.sqlite3
+
+# Archivos de caché de Python
 __pycache__/
 *.pyc
 
-# Base de datos local
-db.sqlite3
-*.sqlite3
+# Archivos de secrets (lo veremos en el paso 3)
+.env
 
-# Archivos del IDE
+# Archivos de staticfiles (se generan en producción)
+staticfiles/
+
+# Carpetas de configuración del editor
+.vscode/
 .idea/

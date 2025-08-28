@@ -1,0 +1,46 @@
+{% extends "inventario/base.html" %}
+
+{% block title %}Reimprimiendo Ticket #{{ pedido.id }}{% endblock %}
+
+{% block content %}
+<div class="text-center p-5 mb-4 bg-white rounded-3 shadow-sm">
+    <h1 class="display-4 fw-bold mb-3">🖨️ Enviando a la Impresora</h1>
+    <p class="lead">El ticket del pedido #{{ pedido.id }} se está enviando a la impresora.</p>
+
+    <div id="status-impresion" class="alert alert-info mt-4">
+        Contactando con el servicio de impresión local...
+    </div>
+
+    <div class="d-grid gap-2 d-md-flex justify-content-md-center mt-4">
+        <a href="{% url 'detalle-pedido' pedido.id %}" class="btn btn-primary btn-lg">Volver al Pedido</a>
+    </div>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const textoTicket = JSON.parse('{{ texto_del_ticket_json|escapejs }}');
+        const statusDiv = document.getElementById('status-impresion');
+        const urlPuente = "{{ url_puente_impresora }}";
+
+        fetch(urlPuente, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ticket_text: textoTicket, commands: ['cut'] })
+        })
+        .then(response => {
+            if (response.ok) {
+                return response.json();
+            }
+            throw new Error('La respuesta de la red no fue exitosa.');
+        })
+        .then(data => {
+            statusDiv.className = 'alert alert-success';
+            statusDiv.textContent = '✅ Ticket enviado a la impresora con éxito.';
+        })
+        .catch((error) => {
+            statusDiv.className = 'alert alert-danger';
+            statusDiv.textContent = '❌ Error: No se pudo conectar con la impresora. Asegúrate de que el programa "puente_impresora.py" esté en ejecución.';
+        });
+    });
+</script>
+{% endblock %}

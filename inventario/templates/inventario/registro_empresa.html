@@ -1,0 +1,54 @@
+{% extends "inventario/base_sin_sidebar.html" %}
+
+{% block title %}Bienvenido - Paso 2 de 2{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="text-center my-5">
+                <h1 class="display-4">¡Bienvenido, {{ username }}! 👋</h1>
+                <p class="lead">Estás a un solo paso de empezar a gestionar tu negocio de forma inteligente.</p>
+            </div>
+
+            <div class="card shadow-sm border-0">
+                <div class="row g-0">
+                    <div class="col-lg-6 d-flex align-items-center bg-light p-5">
+                        <div>
+                            <h4>¿Por qué te va a encantar nuestra app?</h4>
+                            <p class="text-muted">Nuestra plataforma está diseñada para dueños de negocios como tú, que necesitan control y simplicidad.</p>
+                            <ul class="list-unstyled">
+                                <li class="mb-2">✅ <strong>Control de Inventario en tiempo real:</strong> No más "se me acabó y no me di cuenta".</li>
+                                <li class="mb-2">✅ <strong>Punto de Venta rápido y fácil:</strong> Realiza ventas en segundos, sin complicaciones.</li>
+                                <li class="mb-2">✅ <strong>Reportes claros:</strong> Entiende qué productos se venden más y toma mejores decisiones.</li>
+                            </ul>
+                            <p class="fw-bold mt-4">Concéntrate en crecer, nosotros nos encargamos del orden.</p>
+                        </div>
+                    </div>
+                    <div class="col-lg-6">
+                        <div class="card-body p-5">
+                            <h3 class="card-title mb-4">Cuéntanos sobre tu negocio</h3>
+                            <form method="post">
+                                {% csrf_token %}
+                                
+                                <div class="mb-3">
+                                    <label for="{{ form.nombre.id_for_label }}" class="form-label">{{ form.nombre.label }}</label>
+                                    {{ form.nombre }}
+                                </div>
+                                <div class="mb-3">
+                                    <label for="{{ form.giro.id_for_label }}" class="form-label">{{ form.giro.label }}</label>
+                                    {{ form.giro }}
+                                </div>
+
+                                <div class="d-grid mt-4">
+                                    <button type="submit" class="btn btn-success btn-lg">Finalizar y Entrar a mi Cuenta</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

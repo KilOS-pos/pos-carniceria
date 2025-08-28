@@ -1,6 +1,7 @@
 # inventario/views.py
 
 import json
+from django.http import JsonResponse
 import requests, locale
 from django.contrib import messages
 from django.shortcuts import render, redirect, get_object_or_404
@@ -13,7 +14,7 @@ from decimal import Decimal
 from django.db import transaction
 from django.utils import timezone
 from datetime import datetime, timedelta
-from .forms import RetiroForm, RegistroForm, ProductoForm, ClienteForm, ClienteDomicilioForm
+from .forms import RetiroForm, ProductoForm, ClienteForm, ClienteDomicilioForm, UserRegistrationForm, EmpresaOnboardingForm
 from django.db.models.functions import TruncDay, TruncHour, TruncMonth
 from .models import Arqueo
 
@@ -25,22 +26,51 @@ URL_PUENTE_IMPRESORA = "http://127.0.0.1:5000/print"
 # =================================================================================
 
 @transaction.atomic
-def registro_view(request):
+def registro_usuario_view(request):
     if request.user.is_authenticated:
+        # Si el usuario ya está autenticado, llévalo a crear su empresa si no la tiene
+        if not hasattr(request.user, 'profile'):
+             return redirect('registro-empresa')
         return redirect('pagina-inicio')
-        
+
     if request.method == 'POST':
-        form = RegistroForm(request.POST)
+        form = UserRegistrationForm(request.POST)
         if form.is_valid():
-            data = form.cleaned_data
-            nueva_empresa = Empresa.objects.create(nombre=data['nombre_empresa'])
-            nuevo_usuario = User.objects.create_user(username=data['username'], email=data['email'], password=data['password'])
-            UserProfile.objects.create(user=nuevo_usuario, empresa=nueva_empresa)
+            email = form.cleaned_data['email']
+            password = form.cleaned_data['password']
+            # Creamos el usuario usando el email como username para asegurar unicidad
+            nuevo_usuario = User.objects.create_user(username=email, email=email, password=password)
             login(request, nuevo_usuario)
+            # Redirigimos al siguiente paso para registrar la empresa
+            return redirect('registro-empresa')
+    else:
+        form = UserRegistrationForm()
+    return render(request, 'inventario/registro_usuario.html', {'form': form})
+
+
+# --- NUEVA VISTA: PASO 2 ---
+@login_required
+@transaction.atomic
+def registro_empresa_view(request):
+    # Si el usuario ya tiene una empresa, no debe estar aquí
+    if hasattr(request.user, 'profile'):
+        return redirect('pagina-inicio')
+
+    if request.method == 'POST':
+        form = EmpresaOnboardingForm(request.POST)
+        if form.is_valid():
+            nueva_empresa = form.save() # Guarda la nueva empresa
+            # Crea el perfil y lo asocia con el usuario logueado y la nueva empresa
+            UserProfile.objects.create(user=request.user, empresa=nueva_empresa)
+            messages.success(request, f'¡Bienvenido! Tu negocio "{nueva_empresa.nombre}" ha sido creado. Ya puedes empezar.')
             return redirect('pagina-inicio')
     else:
-        form = RegistroForm()
-    return render(request, 'inventario/registro.html', {'form': form})
+        form = EmpresaOnboardingForm()
+
+    return render(request, 'inventario/registro_empresa.html', {
+        'form': form,
+        'username': request.user.get_full_name() or request.user.email
+    })
 
 
 @login_required
@@ -228,7 +258,6 @@ def lista_productos(request, tipo_venta):
     return render(request, 'inventario/lista_productos.html', contexto)
 
 
-@login_required
 def agregar_al_carrito(request, producto_id):
     empresa_del_usuario = request.user.profile.empresa
     producto = get_object_or_404(Producto, id=producto_id, empresa=empresa_del_usuario)
@@ -236,8 +265,52 @@ def agregar_al_carrito(request, producto_id):
     cantidad = carrito.get(str(producto_id), 0) + 1
     carrito[str(producto_id)] = cantidad
     request.session['carrito'] = carrito
+
+    # === CAMBIO CLAVE ===
+    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        # Si la solicitud es AJAX, devuelve una respuesta JSON
+        items_del_carrito, total_carrito = _obtener_datos_carrito(request)
+        return JsonResponse({
+            'success': True,
+            'items': [
+                {
+                    'id': item['producto'].id,
+                    'nombre': item['producto'].nombre,
+                    'cantidad': float(item['cantidad']),
+                    'subtotal': float(item['subtotal'])
+                } for item in items_del_carrito
+            ],
+            'total': float(total_carrito)
+        })
+    # ====================
+    
+    # Si no es AJAX, sigue con el comportamiento de redirección
     tipo_venta = request.session.get('tipo_venta', 'mostrador')
     return redirect('pos', tipo_venta=tipo_venta)
+
+# === NUEVA FUNCIÓN AUXILIAR ===
+def _obtener_datos_carrito(request):
+    """Función auxiliar para procesar los datos del carrito."""
+    empresa_del_usuario = request.user.profile.empresa
+    carrito = request.session.get('carrito', {})
+    items_del_carrito = []
+    total_carrito = Decimal('0.00')
+
+    for producto_id, cantidad in carrito.items():
+        producto = get_object_or_404(Producto, id=int(producto_id), empresa=empresa_del_usuario)
+        
+        precio_unitario = producto.precio
+        if producto.precio_mayoreo and producto.mayoreo_desde_kg and Decimal(str(cantidad)) >= producto.mayoreo_desde_kg:
+            precio_unitario = producto.precio_mayoreo
+
+        subtotal = precio_unitario * Decimal(str(cantidad))
+        total_carrito += subtotal
+        items_del_carrito.append({
+            'producto': producto,
+            'cantidad': cantidad,
+            'subtotal': subtotal
+        })
+    return items_del_carrito, total_carrito
 
 @login_required
 def eliminar_del_carrito(request, producto_id):
@@ -245,8 +318,28 @@ def eliminar_del_carrito(request, producto_id):
     if str(producto_id) in carrito:
         del carrito[str(producto_id)]
     request.session['carrito'] = carrito
+
+    # === CAMBIO CLAVE ===
+    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        # Si la solicitud es AJAX, devuelve una respuesta JSON
+        items_del_carrito, total_carrito = _obtener_datos_carrito(request)
+        return JsonResponse({
+            'success': True,
+            'items': [
+                {
+                    'id': item['producto'].id,
+                    'nombre': item['producto'].nombre,
+                    'cantidad': float(item['cantidad']),
+                    'subtotal': float(item['subtotal'])
+                } for item in items_del_carrito
+            ],
+            'total': float(total_carrito)
+        })
+    # ====================
+    
     tipo_venta = request.session.get('tipo_venta', 'mostrador')
     return redirect('pos', tipo_venta=tipo_venta)
+
 
 @login_required
 def actualizar_cantidad(request, producto_id):

@@ -1,0 +1,276 @@
+{% extends "inventario/base_sin_sidebar.html" %}
+{% load widget_tweaks %}
+
+{% block title %}Crea tu Cuenta - Paso 1 de 2{% endblock %}
+
+{% block content %}
+<style>
+    /* Estilos Generales para ocupar toda la pantalla y la fuente Poppins */
+    html, body {
+        height: 100%;
+        margin: 0;
+        font-family: 'Poppins', sans-serif;
+    }
+
+    /* Contenedor principal de dos columnas */
+    .register-container {
+        display: flex;
+        min-height: 100vh;
+        width: 100vw;
+    }
+
+    /* Columna Izquierda: Formulario */
+    .form-panel {
+        flex-basis: 50%;
+        max-width: 50%;
+        background-color: #ffffff;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 2rem;
+        box-sizing: border-box;
+    }
+
+    .form-content {
+        width: 100%;
+        max-width: 450px;
+    }
+
+    /* Columna Derecha: Contenido promocional */
+    .ad-panel {
+        flex-grow: 1;
+        background: linear-gradient(135deg, #f0f4f8 0%, #e6e9f0 100%);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        padding: 3rem;
+        box-sizing: border-box;
+    }
+
+    /* Estilos del Logo */
+    .form-content .logo {
+        font-size: 2.5rem;
+        font-weight: 700;
+        color: #1a253c;
+        margin-bottom: 0.5rem;
+        display: flex;
+        align-items: center;
+    }
+
+    .form-content .logo i {
+        color: #00bcd4;
+        margin-right: 0.5rem;
+    }
+    
+    .text-info-small {
+        font-size: 0.9rem;
+        color: #555;
+    }
+
+    /* Estilos del formulario */
+    .form-content h2 {
+        font-size: 1.8rem;
+        font-weight: 700;
+        color: #333;
+        margin-bottom: 1rem;
+    }
+
+    .form-content .text-muted {
+        color: #6c757d;
+        font-size: 0.95rem;
+    }
+
+    .form-content .form-label {
+        font-weight: 500;
+        color: #555;
+        margin-bottom: 0.3rem;
+        font-size: 0.9rem;
+    }
+
+    .form-content .form-control {
+        border-radius: 0.5rem;
+        padding: 0.8rem 1rem;
+        background-color: #f8f9fa;
+        border: 1px solid #e9ecef;
+        transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+        font-size: 0.95rem;
+    }
+
+    .form-content .form-control::placeholder {
+        color: #adb5bd;
+    }
+
+    .form-content .form-control:focus {
+        border-color: #00bcd4;
+        box-shadow: 0 0 0 0.1rem rgba(0, 188, 212, 0.25);
+        outline: none;
+    }
+
+    /* Botón principal */
+    .form-content .btn-primary {
+        background-color: #00bcd4;
+        border-color: #00bcd4;
+        padding: 0.9rem 1.5rem;
+        font-weight: 600;
+        border-radius: 0.5rem;
+        font-size: 1.05rem;
+        transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out;
+    }
+    .form-content .btn-primary:hover {
+        background-color: #00a8be;
+        border-color: #00a8be;
+    }
+
+    .form-content a {
+        color: #00bcd4;
+        text-decoration: none;
+        font-weight: 500;
+    }
+    .form-content a:hover {
+        text-decoration: underline;
+    }
+
+    .form-content .small-text {
+        font-size: 0.8rem;
+        color: #888;
+        margin-top: 1rem;
+        text-align: center;
+    }
+
+    /* Cards del panel derecho */
+    .feature-card {
+        background-color: #ffffff;
+        border-radius: 1rem;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        text-align: center;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+        width: 80%;
+        max-width: 350px;
+    }
+
+    .feature-card .icon-circle {
+        background-color: #e0f7fa;
+        color: #00bcd4;
+        border-radius: 50%;
+        width: 60px;
+        height: 60px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin: 0 auto 1rem auto;
+        font-size: 2rem;
+    }
+
+    .feature-card h5 {
+        font-weight: 600;
+        color: #333;
+        margin-bottom: 0.5rem;
+        font-size: 1.1rem;
+    }
+
+    .feature-card p {
+        color: #6c757d;
+        font-size: 0.85rem;
+        margin-bottom: 0;
+    }
+
+    /* Media Queries para diseño responsivo */
+    @media (max-width: 992px) {
+        .register-container {
+            flex-direction: column;
+        }
+        .form-panel, .ad-panel {
+            flex-basis: 100%;
+            max-width: 100%;
+        }
+        .ad-panel {
+            padding: 2rem 1rem;
+        }
+        .feature-card {
+            width: 95%;
+        }
+    }
+    @media (max-width: 576px) {
+        .form-content .logo {
+            font-size: 2.5rem;
+        }
+        .form-content h2 {
+            font-size: 1.5rem;
+        }
+        .form-panel {
+            padding: 1.5rem;
+        }
+    }
+</style>
+
+<div class="register-container">
+    <div class="form-panel">
+        <div class="form-content">
+            
+            <div class="logo">
+                KilOS 
+            </div>
+            <p class="text-info-small mt-0">
+                Prueba gratis por 14 días
+            </p>
+            <h2 class="mt-4 mb-2">Ingresa tus datos para comenzar</h2>
+            <p class="text-muted mb-4">
+                ¿Ya estás registrado? <a href="{% url 'login' %}">Ingresa a tu cuenta</a>
+            </p>
+
+            <form method="post" novalidate>
+                {% csrf_token %}
+
+                {% for field in form %}
+                    <div class="mb-3">
+                        <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
+                        <input 
+                            type="{{ field.field.widget.input_type }}" 
+                            name="{{ field.name }}" 
+                            class="form-control" 
+                            id="{{ field.id_for_label }}" 
+                            placeholder="{{ field.field.widget.attrs.placeholder }}" 
+                            required>
+                        
+                        {% if field.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in field.errors %}{{ error }}{% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+
+                <div class="d-grid mt-4">
+                    <button type="submit" class="btn btn-primary btn-lg">¡Comenzar Demo!</button>
+                </div>
+                <p class="small-text">No necesitas tarjeta de crédito para comenzar</p>
+            </form>
+        </div>
+    </div>
+    <div class="ad-panel">
+        <div class="feature-card">
+            <div class="icon-circle">
+                📦
+            </div>
+            <h5>Cargamos tu inventario gratis</h5>
+            <p>Nuestro equipo te ayudará a que tengas todo listo</p>
+        </div>
+        <div class="feature-card">
+            <div class="icon-circle">
+                💵
+            </div>
+            <h5>Todo Por $99 MXN Por Mes</h5>
+            <p>Un precio claro y simple</p>
+        </div>
+        <div class="feature-card">
+            <div class="icon-circle">
+                📱
+            </div>
+            <h5>Flexible</h5>
+            <p>Puedes usarlo en cualquier dispositivo</p>
+        </div>
+    </div>
+</div>
+{% endblock %}

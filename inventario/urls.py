@@ -10,7 +10,8 @@ urlpatterns = [
     path('pos/<str:tipo_venta>/', views.lista_productos, name='pos'), # Nueva URL para el Punto de Venta
 
     # Autenticación
-    path('registro/', views.registro_view, name='registro'),
+    path('registro/', views.registro_usuario_view, name='registro'),
+    path('registro/empresa/', views.registro_empresa_view, name='registro-empresa'),
     path('login/', auth_views.LoginView.as_view(template_name='inventario/login.html'), name='login'),
     path('logout/', auth_views.LogoutView.as_view(), name='logout'),
 

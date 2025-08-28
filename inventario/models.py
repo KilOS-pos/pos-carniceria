@@ -1,12 +1,11 @@
 from django.db import models
 from django.utils import timezone
-from django.contrib.auth.models import User # Necesario para el futuro
 from django.contrib.auth.models import User
 from decimal import Decimal
 
-# Se define PRIMERO, porque todos los demás modelos se conectarán a este.
 class Empresa(models.Model):
     nombre = models.CharField(max_length=100, unique=True)
+    giro = models.CharField(max_length=100, blank=True, null=True, help_text="Ej. Abarrotes, Ropa, Ferretería, etc.")
 
     def __str__(self):
         return self.nombre

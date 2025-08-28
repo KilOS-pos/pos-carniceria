@@ -3,6 +3,14 @@
 {% block title %}Gestionar Inventario{% endblock %}
 
 {% block content %}
+<style>
+    /* Estilo para el contenedor de la tabla con scroll */
+    .scrollable-table-container {
+        max-height: 600px; /* Ajusta esta altura según tu preferencia */
+        overflow-y: auto;
+    }
+</style>
+
 <div class="row g-4">
     <div class="col-lg-4">
         <div class="card shadow-sm border-0">
@@ -76,69 +84,74 @@
                     <i class="bi bi-archive"></i> Ver Archivados
                 </a>
             </div>
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-striped table-hover mb-0">
-                       <thead class="table-light">
-                          <tr>
-                             <th>Nombre</th>
-                             <th>Precio</th>
-                             <th>Stock</th>
-                             <th>Unidad</th>
-                             <th>Precio Mayoreo</th> <th>Estado</th>
-                             <th>Acciones</th>
-                          </tr>
-                       </thead>
-                       <tbody>
-                        {% for producto in productos %}
-                        <tr class="{% if not producto.is_active %}table-secondary text-muted{% endif %}">
-                             <td>{{ producto.nombre }}</td>
-                             <td>${{ producto.precio|floatformat:2 }}</td>
-                             <td>
-                                {% if producto.stock is not None %}
-                                    {{ producto.stock }}
-                                {% else %}
-                                    N/A
-                                {% endif %}
-                             </td>
-                             <td>{{ producto.get_unidad_medida_display }}</td>
-                             <td>
-                                {% if producto.precio_mayoreo %}
-                                    ${{ producto.precio_mayoreo|floatformat:2 }} desde {{ producto.mayoreo_desde_kg }} {% if producto.unidad_medida == 'kg' %}Kg{% else %}u.{% endif %}
-                                {% else %}
-                                    N/A
-                                {% endif %}
-                             </td>
-                             <td>
-                                 {% if producto.is_active %}
-                                     <span class="badge bg-success">Activo</span>
-                                 {% else %}
-                                     <span class="badge bg-danger">Inactivo</span>
-                                 {% endif %}
-                             </td>
-                             <td class="d-flex gap-1">
-                                 <a href="{% url 'editar-producto' producto.id %}" class="btn btn-warning btn-sm">Editar</a>
-                                 
-                                 {% if producto.is_active %}
-                                     <form action="{% url 'eliminar-producto' producto.id %}" method="post" class="d-inline">
-                                         {% csrf_token %}
-                                         <button type="submit" class="btn btn-danger btn-sm">Desactivar</button>
-                                     </form>
-                                 {% else %}
-                                     <form action="{% url 'reactivar-producto' producto.id %}" method="post" class="d-inline">
-                                         {% csrf_token %}
-                                         <button type="submit" class="btn btn-info btn-sm">Reactivar</button>
-                                     </form>
-                                 {% endif %}
-                            </td>
-                        </tr>
-                        {% empty %}
-                        <tr>
-                            <td colspan="7" class="text-center p-4">Aún no has agregado ningún producto activo.</td>
-                        </tr>
-                        {% endfor %}
-                     </tbody>
-                   </table>
+            <div class="card-body p-0" id="products-table">
+                <div class="p-3">
+                    <input type="text" class="form-control search" placeholder="Buscar producto...">
+                </div>
+                <div class="scrollable-table-container">
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover mb-0">
+                           <thead class="table-light">
+                              <tr>
+                                 <th>Nombre</th>
+                                 <th>Precio</th>
+                                 <th>Stock</th>
+                                 <th>Unidad</th>
+                                 <th>Precio Mayoreo</th> <th>Estado</th>
+                                 <th>Acciones</th>
+                              </tr>
+                           </thead>
+                           <tbody class="list">
+                            {% for producto in productos %}
+                            <tr class="{% if not producto.is_active %}table-secondary text-muted{% endif %}">
+                                 <td class="name">{{ producto.nombre }}</td>
+                                 <td>${{ producto.precio|floatformat:2 }}</td>
+                                 <td>
+                                    {% if producto.stock is not None %}
+                                        {{ producto.stock }}
+                                    {% else %}
+                                        N/A
+                                    {% endif %}
+                                 </td>
+                                 <td>{{ producto.get_unidad_medida_display }}</td>
+                                 <td>
+                                    {% if producto.precio_mayoreo %}
+                                        ${{ producto.precio_mayoreo|floatformat:2 }} desde {{ producto.mayoreo_desde_kg }} {% if producto.unidad_medida == 'kg' %}Kg{% else %}u.{% endif %}
+                                    {% else %}
+                                        N/A
+                                    {% endif %}
+                                 </td>
+                                 <td>
+                                     {% if producto.is_active %}
+                                         <span class="badge bg-success">Activo</span>
+                                     {% else %}
+                                         <span class="badge bg-danger">Inactivo</span>
+                                     {% endif %}
+                                 </td>
+                                 <td class="d-flex gap-1">
+                                     <a href="{% url 'editar-producto' producto.id %}" class="btn btn-warning btn-sm">Editar</a>
+                                     
+                                     {% if producto.is_active %}
+                                         <form action="{% url 'eliminar-producto' producto.id %}" method="post" class="d-inline">
+                                             {% csrf_token %}
+                                             <button type="submit" class="btn btn-danger btn-sm">Desactivar</button>
+                                         </form>
+                                     {% else %}
+                                         <form action="{% url 'reactivar-producto' producto.id %}" method="post" class="d-inline">
+                                             {% csrf_token %}
+                                             <button type="submit" class="btn btn-info btn-sm">Reactivar</button>
+                                         </form>
+                                     {% endif %}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="7" class="text-center p-4">Aún no has agregado ningún producto activo.</td>
+                            </tr>
+                            {% endfor %}
+                         </tbody>
+                       </table>
+                    </div>
                 </div>
             </div>
         </div>
@@ -182,6 +195,11 @@ document.addEventListener('DOMContentLoaded', function() {
     
     toggleMayoreoFields();
     mayoreoSwitch.addEventListener('change', toggleMayoreoFields);
+
+    // --- Lógica para la búsqueda con List.js ---
+    const productList = new List('products-table', {
+        valueNames: ['name']
+    });
 });
 </script>
 {% endblock %}
