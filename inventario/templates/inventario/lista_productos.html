@@ -203,7 +203,9 @@
                 <button type="button" class="btn btn-success btn-lg flex-grow-1" data-bs-toggle="modal" data-bs-target="#efectivoModal">
                     <i class="bi bi-cash me-2"></i>Cobrar en Efectivo
                 </button>
-                <a href="{% url 'finalizar-venta' 'Tarjeta' %}" class="btn btn-info btn-lg flex-grow-1"><i class="bi bi-credit-card me-2"></i>Cobrar con Tarjeta</a>
+                <button type="button" class="btn btn-info btn-lg flex-grow-1" data-bs-toggle="modal" data-bs-target="#tarjetaModal">
+                  <i class="bi bi-credit-card me-2"></i>Cobrar con Tarjeta
+                </button>
             </div>
         </div>
     </div>
@@ -345,6 +347,25 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
                 <button type="button" class="btn btn-primary" id="kgModalAddToCartBtn">Añadir al Carrito</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="tarjetaModal" tabindex="-1" aria-labelledby="tarjetaModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="tarjetaModalLabel">Cobro con Terminal</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center">
+                <i class="bi bi-credit-card-2-front" style="font-size: 3rem; color: #17a2b8;"></i>
+                <p class="lead mt-3">Por favor, cobra al cliente con tu terminal de tarjeta.</p>
+                <p class="text-muted">Una vez que el cobro esté listo, finaliza la compra.</p>
+            </div>
+            <div class="modal-footer d-flex justify-content-center">
+                <a href="{% url 'finalizar-venta' 'Tarjeta' %}" class="btn btn-success btn-lg w-100">Compra Finalizada</a>
             </div>
         </div>
     </div>

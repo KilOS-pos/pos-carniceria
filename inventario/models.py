@@ -40,15 +40,15 @@ class Producto(models.Model):
         return self.nombre
 
 class Cliente(models.Model):
-    empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE) # <-- NUEVO: El cliente pertenece a una empresa
+    empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE)
     nombre = models.CharField(max_length=100)
-    telefono = models.CharField(max_length=20) # Ya no necesita ser 'unique' globalmente
+    telefono = models.CharField(max_length=20)
     direccion = models.TextField(blank=True, null=True)
 
     def __str__(self):
         return f"{self.nombre} - {self.telefono}"
 
-class Arqueo(models.Model): # <-- MOVIMOS ARQUEO ANTES DE PEDIDO Y RETIRO
+class Arqueo(models.Model):
     empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE)
     fecha = models.DateField(default=timezone.now)
     ventas_efectivo = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
@@ -63,6 +63,9 @@ class Arqueo(models.Model): # <-- MOVIMOS ARQUEO ANTES DE PEDIDO Y RETIRO
         return f"Arqueo del {self.fecha.strftime('%d/%m/%Y')} - {self.empresa.nombre}"
 
 class Pedido(models.Model):
+    # NUEVO CAMPO PARA EL NÚMERO DE TICKET
+    ticket_numero = models.IntegerField(null=True, blank=True)
+    
     empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE)
     METODO_PAGO_CHOICES = [
         ('Efectivo', 'Efectivo'),
@@ -74,11 +77,22 @@ class Pedido(models.Model):
     metodo_pago = models.CharField(max_length=10, choices=METODO_PAGO_CHOICES, default='Efectivo')
     monto_recibido = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     cambio_entregado = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    # --- CAMBIO IMPORTANTE ---
     arqueo = models.ForeignKey(Arqueo, on_delete=models.SET_NULL, null=True, blank=True, related_name='pedidos')
 
+    def save(self, *args, **kwargs):
+        # Si el número de ticket no está definido (es un nuevo pedido), lo asignamos
+        if not self.ticket_numero:
+            # Buscamos el último pedido de esta empresa
+            last_pedido = Pedido.objects.filter(empresa=self.empresa).order_by('-ticket_numero').first()
+            if last_pedido and last_pedido.ticket_numero:
+                self.ticket_numero = last_pedido.ticket_numero + 1
+            else:
+                self.ticket_numero = 1
+        super().save(*args, **kwargs)
+
     def __str__(self):
-        return f"Pedido #{self.id} del {self.fecha.strftime('%d/%m/%Y')} - Total: ${self.total}"
+        return f"Pedido #{self.ticket_numero} del {self.fecha.strftime('%d/%m/%Y')} - Total: ${self.total}"
+
 
 class PedidoItem(models.Model):
     pedido = models.ForeignKey(Pedido, related_name='items', on_delete=models.CASCADE)
@@ -94,7 +108,6 @@ class Retiro(models.Model):
     fecha = models.DateTimeField(default=timezone.now)
     monto = models.DecimalField(max_digits=10, decimal_places=2)
     concepto = models.CharField(max_length=255)
-    # --- CAMBIO IMPORTANTE ---
     arqueo = models.ForeignKey(Arqueo, on_delete=models.SET_NULL, null=True, blank=True, related_name='retiros_del_arqueo')
 
 

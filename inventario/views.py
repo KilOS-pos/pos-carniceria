@@ -850,7 +850,8 @@ def _generar_texto_ticket_venta(pedido):
     texto_ticket = f"{empresa.nombre.center(42)}\n"
     texto_ticket += "LA MEJOR CARNE DE COLIMA\n".center(42)
     texto_ticket += "=" * 42 + "\n"
-    texto_ticket += f"TICKET: #{pedido.id:06d}\n"
+    # CAMBIO: Usamos el nuevo campo ticket_numero
+    texto_ticket += f"TICKET: #{pedido.ticket_numero:06d}\n"
     texto_ticket += f"FECHA: {timezone.localtime(pedido.fecha).strftime('%d/%m/%Y %H:%M:%S')}\n"
     texto_ticket += f"TIPO: {tipo_venta.upper()}\n"
     texto_ticket += f"CLIENTE: {cliente.nombre if cliente else 'Mostrador'}\n"
