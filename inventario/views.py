@@ -86,6 +86,7 @@ def inicio_view(request):
     empresa_del_usuario = request.user.profile.empresa
     hoy = timezone.localtime(timezone.now())
 
+    # --- Lógica de Reporte Tabular (Ya existente en inicio_view) ---
     group_by = request.GET.get('group_by', 'dia')
     time_range = request.GET.get('time_range', '7dias')
 
@@ -152,14 +153,57 @@ def inicio_view(request):
         'margen': sum(item['margen'] for item in reporte_agrupado),
     }
 
+    # --- Lógica del Gráfico de Ventas (Copiada de dashboard_ventas) ---
+    periodo_grafica = request.GET.get('periodo', 'hoy')
+    
+    if periodo_grafica == 'mes':
+        fecha_inicio_grafica = hoy - timedelta(days=29)
+        titulo_grafica = "Ventas de los Últimos 30 Días"
+        dias_a_mostrar = 30
+    elif periodo_grafica == 'semana':
+        fecha_inicio_grafica = hoy - timedelta(days=6)
+        titulo_grafica = "Ventas de los Últimos 7 Días"
+        dias_a_mostrar = 7
+    else: # Por defecto: 'hoy'
+        fecha_inicio_grafica = hoy.replace(hour=0, minute=0, second=0, microsecond=0)
+        titulo_grafica = "Ventas del Día de Hoy (por hora)"
+        dias_a_mostrar = 1
+
+    etiquetas, datos = [], []
+    if dias_a_mostrar > 1:
+        ventas_agrupadas = Pedido.objects.filter(empresa=empresa_del_usuario, fecha__date__range=[fecha_inicio_grafica, hoy]).values('fecha__date').annotate(total=Sum('total')).order_by('fecha__date')
+        ventas_dict = {item['fecha__date'].strftime('%d/%m'): item['total'] for item in ventas_agrupadas}
+        for i in range(dias_a_mostrar):
+            fecha = fecha_inicio_grafica + timedelta(days=i)
+            fecha_str = fecha.strftime('%d/%m')
+            etiquetas.append(fecha_str)
+            datos.append(float(ventas_dict.get(fecha_str, 0)))
+        tipo_grafica = 'bar'
+    else:
+        ventas_agrupadas = Pedido.objects.filter(empresa=empresa_del_usuario, fecha__date=hoy).annotate(hora=TruncHour('fecha')).values('hora').annotate(total=Sum('total')).order_by('hora')
+        ventas_dict = {item['hora'].strftime('%H:00'): item['total'] for item in ventas_agrupadas}
+        for i in range(24):
+            hora_str = f"{i:02d}:00"
+            etiquetas.append(hora_str)
+            datos.append(float(ventas_dict.get(hora_str, 0)))
+        tipo_grafica = 'line'
+    
+    # --- Combinar los contextos en uno solo ---
     contexto = {
+        # Contexto del Reporte Tabular
         'titulo_reporte': titulo_reporte,
         'reporte_diario': reporte_agrupado,
         'totales': totales,
         'group_by': group_by,
         'time_range': time_range,
+        # Contexto del Gráfico
+        'titulo_grafica': titulo_grafica, # Renombrado para evitar conflicto
+        'etiquetas_json': json.dumps(etiquetas),
+        'datos_json': json.dumps(datos),
+        'tipo_grafica': tipo_grafica,
+        'periodo_grafica': periodo_grafica,
     }
-    
+
     return render(request, 'inventario/inicio.html', contexto)
 
 

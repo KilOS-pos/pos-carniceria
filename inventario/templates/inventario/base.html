@@ -1,6 +1,11 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Agbalumo&family=Shrikhand&display=swap" rel="stylesheet">
+
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}KilOS - Punto De Venta{% endblock %}</title>
@@ -33,6 +38,7 @@
             transition: width 0.3s ease; /* Transición suave para el ancho */
             z-index: 1030; /* Para que esté por encima del contenido */
         }
+
         
         /* === ESTADO EXPANDIDO DE LA SIDEBAR (AL PASAR EL CURSOR) === */
         .sidebar:hover {
@@ -126,6 +132,8 @@
         .dropdown-menu-dark a.dropdown-item:hover {
             background-color: #2a3b5a;
         }
+
+    
     </style>
 </head>
 <body>
@@ -134,7 +142,7 @@
     <div class="sidebar">
         <div class="logo-container mb-4">
             <span class="logo-collapsed">⚖️</span>
-            <span class="link-text logo-expanded">⚖️ KilOS PDV</span>
+            <span class="link-text logo-expanded" style="font-size: 28px;">⚖️ KilOS PDV</span>
         </div>
 
         <ul class="nav flex-column">
@@ -147,7 +155,7 @@
             <div class="sidebar-heading"><span class="link-text">General</span></div>
             <li class="nav-item">
                  <a class="nav-link" href="{% url 'pagina-inicio' %}">
-                    <i class="bi bi-house-door"></i><span class="link-text">Dashboard</span>
+                    <i class="bi bi-house-door"></i><span class="link-text">Reportes</span>
                 </a>
             </li>
             <li class="nav-item">
@@ -164,7 +172,7 @@
             <div class="sidebar-heading"><span class="link-text">Caja</span></div>
             <li class="nav-item">
                 <a class="nav-link" href="{% url 'gestion-caja' %}">
-                    <i class="bi bi-cash-stack"></i><span class="link-text">Registrar Retiro</span>
+                    <i class="bi bi-cash-stack"></i><span class="link-text">Retiros</span>
                 </a>
             </li>
             <li class="nav-item">
@@ -176,17 +184,12 @@
             <div class="sidebar-heading"><span class="link-text">Análisis</span></div>
             <li class="nav-item">
                 <a class="nav-link" href="{% url 'reporte-ventas' %}">
-                    <i class="bi bi-file-earmark-text"></i><span class="link-text">Reportes de Ventas</span>
-                </a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link" href="{% url 'dashboard' %}">
-                    <i class="bi bi-graph-up"></i><span class="link-text">Gráficas</span>
+                    <i class="bi bi-file-earmark-text"></i><span class="link-text">Historial De Ventas</span>
                 </a>
             </li>
             <li class="nav-item">
                 <a class="nav-link" href="{% url 'reporte-arqueos' %}">
-                    <i class="bi bi-archive"></i><span class="link-text">Historial de Arqueos</span>
+                    <i class="bi bi-archive"></i><span class="link-text">Historial De Arqueos</span>
                 </a>
             </li>
         </ul>

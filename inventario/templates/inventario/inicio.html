@@ -4,8 +4,123 @@
 {% block title %}Reporte de Ventas - {{ user.profile.empresa.nombre }}{% endblock %}
 
 {% block content %}
+<style>
+  .grafica-pequena {
+    max-height: 300px; /* Cambia este valor por la altura deseada */
+  }
+
+  /* Estilos para el mensaje de bienvenida */
+    .welcome-message {
+        padding: 2rem;
+        border-radius: 15px;
+        color: rgb(58, 58, 58);
+        opacity: 0;
+        transform: translateY(-20px);
+        animation: fadeInSlideDown 1s ease-out forwards;
+    }
+
+    /* Animación de entrada */
+    @keyframes fadeInSlideDown {
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    /* Estilo para el texto animado (efecto de tecleado) */
+    .animated-text {
+        font-family: 'Shrikhand', sans-serif; /* Usamos una fuente moderna */
+        font-weight: bold;
+        opacity: 0; /* Empieza invisible */
+        overflow: hidden; /* Oculta el texto que no se ha "tecleado" */
+        white-space: nowrap; /* Mantiene el texto en una sola línea */
+        margin: 0 auto; /* Centra el texto */
+        letter-spacing: .1em; /* Espacio entre letras */
+        animation: fadeInText 0.5s ease-in-out 0.5s forwards; /* Se activa después de 1 segundo */
+    }
+
+    /* Animación de desvanecimiento */
+    @keyframes fadeInText {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+
+</style>
+
+<div class="welcome-message mb-4">
+    <h1 class="display-4 fw-bold animated-text">¡Bienvenido!</h1>
+</div>
+
 <div class="container-fluid px-4">
 
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="mb-0">📈 {{ titulo_grafica }}</h1>
+        <div>
+            <a href="{% url 'pagina-inicio' %}?periodo=hoy" class="btn btn-success">Ventas de Hoy</a>
+            <a href="{% url 'pagina-inicio' %}?periodo=semana" class="btn btn-primary">Últimos 7 Días</a>
+            <a href="{% url 'pagina-inicio' %}?periodo=mes" class="btn btn-secondary">Últimos 30 Días</a>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <canvas id="graficaVentas" class="grafica-pequena"></canvas>
+        </div>
+    </div>
+
+    <script>
+        const etiquetas = JSON.parse('{{ etiquetas_json|escapejs }}');
+        const datos = JSON.parse('{{ datos_json|escapejs }}');
+        const tipoGrafica = '{{ tipo_grafica }}';
+
+        const ctx = document.getElementById('graficaVentas');
+
+        new Chart(ctx, {
+            type: tipoGrafica,
+            data: {
+                labels: etiquetas,
+                datasets: [{
+                    label: 'Ventas ($)',
+                    data: datos,
+                    backgroundColor: tipoGrafica === 'line' ? 'rgba(52, 152, 219, 0.2)' : 'rgba(231, 76, 60, 0.7)',
+                    borderColor: tipoGrafica === 'line' ? 'rgba(52, 152, 219, 1)' : 'rgba(192, 57, 43, 1)',
+                    borderWidth: tipoGrafica === 'line' ? 2 : 1,
+                    borderRadius: tipoGrafica === 'line' ? 0 : 5,
+                    fill: tipoGrafica === 'line',
+                    tension: 0.1
+                }]
+            },
+            options: {
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                return '$' + value.toLocaleString('es-MX');
+                            }
+                        }
+                    }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                if (context.parsed.y !== null) {
+                                    label += new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(context.parsed.y);
+                                }
+                                return label;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    </script>
+    
     <div class="d-flex justify-content-between align-items-center mb-2">
         <div>
             <h1 class="h2 mb-0">Reporte de Ventas</h1>
@@ -90,6 +205,5 @@
             </div>
         </div>
     </div>
-
 </div>
 {% endblock %}

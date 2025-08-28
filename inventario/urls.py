@@ -34,7 +34,6 @@ urlpatterns = [
     path('reportes/', views.reporte_ventas, name='reporte-ventas'),
     path('reportes/pedido/<int:pedido_id>/', views.detalle_pedido, name='detalle-pedido'),
     path('reportes/pedido/<int:pedido_id>/reimprimir/', views.reimprimir_pedido, name='reimprimir-pedido'),
-    path('dashboard/', views.dashboard_ventas, name='dashboard'),
 
     # Gestión de Caja
     path('caja/', views.gestion_caja, name='gestion-caja'),
