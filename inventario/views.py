@@ -215,8 +215,45 @@ def inicio_view(request):
 def lista_productos(request, tipo_venta):
     empresa_del_usuario = request.user.profile.empresa
     
-    request.session['tipo_venta'] = tipo_venta
+    # --- LÓGICA DE BLOQUEO CON CORRECCIÓN DE ZONA HORARIA ---
+    
+    # 1. Obtenemos el momento exacto de la medianoche de hoy en la zona horaria local
+    hoy_medianoche_local = timezone.localtime(timezone.now()).replace(hour=0, minute=0, second=0, microsecond=0)
 
+    # 2. Buscamos el pedido pendiente más antiguo (cuya fecha sea anterior a la medianoche de hoy)
+    pedido_pendiente = Pedido.objects.filter(
+        empresa=empresa_del_usuario,
+        fecha__lt=hoy_medianoche_local,  # Usamos __lt (menor que) con el DateTime completo
+        arqueo__isnull=True
+    ).order_by('fecha').first()
+
+    # 3. Buscamos el retiro pendiente más antiguo
+    retiro_pendiente = Retiro.objects.filter(
+        empresa=empresa_del_usuario,
+        fecha__lt=hoy_medianoche_local,
+        arqueo__isnull=True
+    ).order_by('fecha').first()
+
+    # 4. Determinamos la fecha pendiente más antigua de las dos
+    dia_pendiente = None
+    if pedido_pendiente and retiro_pendiente:
+        # Convertimos la fecha a local antes de compararla
+        dia_pendiente = min(timezone.localtime(pedido_pendiente.fecha).date(), timezone.localtime(retiro_pendiente.fecha).date())
+    elif pedido_pendiente:
+        dia_pendiente = timezone.localtime(pedido_pendiente.fecha).date()
+    elif retiro_pendiente:
+        dia_pendiente = timezone.localtime(retiro_pendiente.fecha).date()
+
+    # 5. Si encontramos cualquier día pendiente, bloqueamos el acceso
+    if dia_pendiente:
+        contexto = {'dia_pendiente': dia_pendiente}
+        return render(request, 'inventario/arqueo_pendiente.html', contexto)
+
+    # --- FIN DE LA LÓGICA DE BLOQUEO ---
+
+    # Si no hay bloqueo, la función continúa normalmente...
+    hoy_fecha = timezone.localdate()
+    request.session['tipo_venta'] = tipo_venta
     cliente_seleccionado = None
     if 'cliente_id' in request.session:
         try:
@@ -224,86 +261,26 @@ def lista_productos(request, tipo_venta):
         except Cliente.DoesNotExist:
             del request.session['cliente_id']
     
-    form_cliente = None
-    if tipo_venta == 'domicilio':
-        form_cliente = ClienteDomicilioForm()
-
-    if request.method == 'POST':
-        if 'guardar_cliente' in request.POST:
-            if tipo_venta == 'domicilio':
-                form_cliente = ClienteDomicilioForm(request.POST)
-            else:
-                form_cliente = ClienteForm(request.POST)
-
-            if form_cliente.is_valid():
-                nuevo_cliente = form_cliente.save(commit=False)
-                nuevo_cliente.empresa = empresa_del_usuario
-                nuevo_cliente.save()
-                request.session['cliente_id'] = nuevo_cliente.id
-                messages.success(request, f'Cliente "{nuevo_cliente.nombre}" agregado y seleccionado para la venta.')
-                return redirect('pos', tipo_venta=tipo_venta)
-            else:
-                messages.error(request, 'Hubo un error al guardar el cliente. Por favor, revisa los datos proporcionados.')
-
     busqueda_cliente = request.GET.get('buscar_cliente', '')
-    clientes_encontrados = None
-    if busqueda_cliente:
-        clientes_encontrados = Cliente.objects.filter(
-            Q(nombre__icontains=busqueda_cliente) | Q(telefono__icontains=busqueda_cliente),
-            empresa=empresa_del_usuario
-        ).order_by('nombre')
+    clientes_encontrados = Cliente.objects.filter(
+        Q(nombre__icontains=busqueda_cliente) | Q(telefono__icontains=busqueda_cliente),
+        empresa=empresa_del_usuario
+    ).order_by('nombre') if busqueda_cliente else None
     
-    productos = Producto.objects.filter(empresa=empresa_del_usuario, is_active=True).order_by('nombre') 
-    carrito = request.session.get('carrito', {})
-    items_del_carrito = []
-    total_carrito = Decimal('0.00')
+    productos = Producto.objects.filter(empresa=empresa_del_usuario, is_active=True).order_by('nombre')
+    items_del_carrito, total_carrito = _obtener_datos_carrito(request)
 
-    for producto_id, cantidad in carrito.items():
-        producto = get_object_or_404(Producto, id=int(producto_id), empresa=empresa_del_usuario)
-        
-        precio_unitario = producto.precio
-        if producto.precio_mayoreo and producto.mayoreo_desde_kg and Decimal(str(cantidad)) >= producto.mayoreo_desde_kg:
-            precio_unitario = producto.precio_mayoreo
-
-        subtotal = precio_unitario * Decimal(str(cantidad))
-        total_carrito += subtotal
-        items_del_carrito.append({
-            'producto': producto,
-            'cantidad': cantidad,
-            'subtotal': subtotal
-        })
-
-    hoy = timezone.localtime(timezone.now()).date()
+    total_efectivo = Pedido.objects.filter(empresa=empresa_del_usuario, fecha__date=hoy_fecha, metodo_pago='Efectivo', arqueo__isnull=True, estado='Completado').aggregate(Sum('total'))['total__sum'] or Decimal('0.00')
+    total_tarjeta = Pedido.objects.filter(empresa=empresa_del_usuario, fecha__date=hoy_fecha, metodo_pago='Tarjeta', arqueo__isnull=True, estado='Completado').aggregate(Sum('total'))['total__sum'] or Decimal('0.00')
+    total_retiros = Retiro.objects.filter(empresa=empresa_del_usuario, fecha__date=hoy_fecha, arqueo__isnull=True).aggregate(Sum('monto'))['monto__sum'] or Decimal('0.00')
     
-    # --- CAMBIO IMPORTANTE: Solo contar ventas y retiros que NO han sido asignados a un arqueo ---
-    total_efectivo = Pedido.objects.filter(empresa=empresa_del_usuario, fecha__date=hoy, metodo_pago='Efectivo', arqueo__isnull=True).aggregate(Sum('total'))['total__sum'] or Decimal('0.00')
-    total_tarjeta = Pedido.objects.filter(empresa=empresa_del_usuario, fecha__date=hoy, metodo_pago='Tarjeta', arqueo__isnull=True).aggregate(Sum('total'))['total__sum'] or Decimal('0.00')
-    total_retiros = Retiro.objects.filter(empresa=empresa_del_usuario, fecha__date=hoy, arqueo__isnull=True).aggregate(Sum('monto'))['monto__sum'] or Decimal('0.00')
-    
-    efectivo_esperado = total_efectivo - total_retiros
-    total_ventas_dia = total_efectivo + total_tarjeta
-
     contexto = {
-        'productos': productos,
-        'busqueda_cliente': busqueda_cliente,
-        'clientes_encontrados': clientes_encontrados,
-        'cliente_seleccionado': cliente_seleccionado,
-        'tipo_venta': tipo_venta,
-        'items_del_carrito': items_del_carrito,
-        'total_carrito': total_carrito,
-        'form_cliente': form_cliente,
-        'total_efectivo': total_efectivo,
-        'total_tarjeta': total_tarjeta,
-        'total_retiros': total_retiros,
-        'efectivo_esperado': efectivo_esperado,
-        'total_ventas_dia': total_ventas_dia,
+        'productos': productos, 'busqueda_cliente': busqueda_cliente, 'clientes_encontrados': clientes_encontrados, 'cliente_seleccionado': cliente_seleccionado,
+        'tipo_venta': tipo_venta, 'items_del_carrito': items_del_carrito, 'total_carrito': total_carrito,
+        'total_efectivo': total_efectivo, 'total_tarjeta': total_tarjeta, 'total_retiros': total_retiros,
+        'efectivo_esperado': total_efectivo - total_retiros, 'total_ventas_dia': total_efectivo + total_tarjeta,
     }
-    
     return render(request, 'inventario/lista_productos.html', contexto)
-
-
-# Asegúrate de tener esta importación al inicio de tu archivo views.py
-from decimal import Decimal
 
 @login_required
 def agregar_al_carrito(request, producto_id):
@@ -762,46 +739,85 @@ def gestion_caja(request):
 
 @login_required
 def arqueo_caja(request):
+    print(f"DEBUG: Parámetro de fecha recibido: {request.GET.get('fecha')}")
     empresa_del_usuario = request.user.profile.empresa
-    hoy = timezone.localtime(timezone.now()).date()
+    fecha_str = request.GET.get('fecha')
     
-    # --- CAMBIO IMPORTANTE: Solo contar ventas y retiros que NO han sido asignados a un arqueo ---
-    ventas_efectivo = Pedido.objects.filter(empresa=empresa_del_usuario, fecha__date=hoy, metodo_pago='Efectivo', arqueo__isnull=True)
-    total_efectivo = ventas_efectivo.aggregate(Sum('total'))['total__sum'] or Decimal('0.00')
-    
-    ventas_tarjeta = Pedido.objects.filter(empresa=empresa_del_usuario, fecha__date=hoy, metodo_pago='Tarjeta', arqueo__isnull=True)
-    total_tarjeta = ventas_tarjeta.aggregate(Sum('total'))['total__sum'] or Decimal('0.00')
-    
-    retiros_hoy = Retiro.objects.filter(empresa=empresa_del_usuario, fecha__date=hoy, arqueo__isnull=True)
-    total_retiros = retiros_hoy.aggregate(Sum('monto'))['monto__sum'] or Decimal('0.00')
-    
-    efectivo_esperado = total_efectivo - total_retiros
-    total_ventas = total_efectivo + total_tarjeta
+    try:
+        # Intenta convertir el texto de la URL a una fecha. Si no hay texto, usa la fecha de hoy.
+        fecha_a_procesar = datetime.strptime(fecha_str, '%Y-%m-%d').date() if fecha_str else timezone.localdate()
+    except (ValueError, TypeError):
+        # Si el formato de fecha en la URL es inválido, usa hoy por seguridad.
+        fecha_a_procesar = timezone.localdate()
 
-    arqueo_temporal = Arqueo(
-        empresa=empresa_del_usuario,
-        fecha=hoy,
-        ventas_efectivo=total_efectivo,
-        ventas_tarjeta=total_tarjeta,
-        retiros=total_retiros,
-        efectivo_esperado=efectivo_esperado,
-        monto_contado=Decimal('0.00'),
-        diferencia=Decimal('0.00')
-    )
+    # Todas las consultas usan la 'fecha_a_procesar' determinada.
+    ventas_efectivo = Pedido.objects.filter(empresa=empresa_del_usuario, fecha__date=fecha_a_procesar, metodo_pago='Efectivo', arqueo__isnull=True, estado='Completado').aggregate(Sum('total'))['total__sum'] or Decimal('0.00')
+    ventas_tarjeta = Pedido.objects.filter(empresa=empresa_del_usuario, fecha__date=fecha_a_procesar, metodo_pago='Tarjeta', arqueo__isnull=True, estado='Completado').aggregate(Sum('total'))['total__sum'] or Decimal('0.00')
+    retiros_del_dia = Retiro.objects.filter(empresa=empresa_del_usuario, fecha__date=fecha_a_procesar, arqueo__isnull=True).aggregate(Sum('monto'))['monto__sum'] or Decimal('0.00')
     
-    texto_arqueo = _generar_texto_ticket_arqueo(arqueo_temporal)
-    
+    efectivo_esperado = ventas_efectivo - retiros_del_dia
+    total_ventas = ventas_efectivo + ventas_tarjeta
+
     contexto = {
-        'fecha': hoy,
-        'total_efectivo': total_efectivo,
-        'total_tarjeta': total_tarjeta,
+        'fecha': fecha_a_procesar,
+        'total_efectivo': ventas_efectivo,
+        'total_tarjeta': ventas_tarjeta,
         'total_ventas': total_ventas,
-        'total_retiros': total_retiros,
+        'total_retiros': retiros_del_dia,
         'efectivo_esperado': efectivo_esperado,
-        'texto_arqueo_json': json.dumps(texto_arqueo),
-        'url_puente_impresora': URL_PUENTE_IMPRESORA  # <-- CORRECCIÓN
     }
     return render(request, 'inventario/arqueo_caja.html', contexto)
+
+
+@login_required
+@transaction.atomic
+def cerrar_caja(request):
+    """
+    Procesa el formulario de cierre de caja. Recibe la fecha a cerrar
+    desde un campo oculto en el formulario para asegurar que se cierra el día correcto.
+    """
+    if request.method == 'POST':
+        empresa_del_usuario = request.user.profile.empresa
+        
+        try:
+            # Lee la fecha del campo oculto del formulario.
+            fecha_arqueo_str = request.POST.get('fecha_arqueo')
+            fecha_a_cerrar = datetime.strptime(fecha_arqueo_str, '%Y-%m-%d').date()
+            
+            # Lee y convierte el monto contado.
+            monto_contado = Decimal(request.POST.get('monto_contado'))
+        except (ValueError, TypeError, InvalidOperation):
+            messages.error(request, "Datos de cierre inválidos. Por favor, intenta de nuevo.")
+            # Si hay un error, redirige de vuelta a la página de arqueo del día problemático.
+            return redirect(f"{reverse('arqueo-caja')}?fecha={fecha_arqueo_str}")
+
+        # Filtra los registros del día a cerrar que no tengan arqueo.
+        pedidos_del_dia = Pedido.objects.filter(empresa=empresa_del_usuario, fecha__date=fecha_a_cerrar, arqueo__isnull=True)
+        retiros_del_dia = Retiro.objects.filter(empresa=empresa_del_usuario, fecha__date=fecha_a_cerrar, arqueo__isnull=True)
+
+        total_efectivo = pedidos_del_dia.filter(metodo_pago='Efectivo').aggregate(Sum('total'))['total__sum'] or Decimal('0.00')
+        total_tarjeta = pedidos_del_dia.filter(metodo_pago='Tarjeta').aggregate(Sum('total'))['total__sum'] or Decimal('0.00')
+        total_retiros = retiros_del_dia.aggregate(Sum('monto'))['monto__sum'] or Decimal('0.00')
+
+        efectivo_esperado = total_efectivo - total_retiros
+        diferencia = monto_contado - efectivo_esperado
+
+        arqueo = Arqueo.objects.create(
+            empresa=empresa_del_usuario, fecha=fecha_a_cerrar, ventas_efectivo=total_efectivo,
+            ventas_tarjeta=total_tarjeta, retiros=total_retiros, efectivo_esperado=efectivo_esperado,
+            monto_contado=monto_contado, diferencia=diferencia, cerrado_por=request.user 
+        )
+
+        # "Sella" los pedidos y retiros asociándolos al nuevo arqueo.
+        pedidos_del_dia.update(arqueo=arqueo)
+        retiros_del_dia.update(arqueo=arqueo)
+        
+        messages.success(request, f"Caja del día {fecha_a_cerrar.strftime('%d/%m/%Y')} cerrada exitosamente.")
+        return redirect('cierre-caja-exitoso', arqueo_id=arqueo.id)
+
+    # Si no es POST, redirige a la página principal de arqueo.
+    return redirect('arqueo-caja')
+
 
 # =================================================================================
 # VISTAS SOLO PARA IMPRESIÓN
@@ -971,51 +987,6 @@ def retiro_exitoso(request, retiro_id):
     }
     return render(request, 'inventario/retiro_exitoso.html', contexto)
 
-@login_required
-@transaction.atomic
-def cerrar_caja(request):
-    empresa_del_usuario = request.user.profile.empresa
-    hoy = timezone.localtime(timezone.now()).date()
-
-    if request.method == 'POST':
-        monto_contado_str = request.POST.get('monto_contado')
-        try:
-            monto_contado = Decimal(monto_contado_str)
-        except (ValueError, TypeError):
-            messages.error(request, "Monto inválido. Por favor, ingresa un número válido.")
-            return redirect('arqueo-caja')
-
-        # --- CAMBIO IMPORTANTE: Solo seleccionar registros SIN arqueo asignado ---
-        pedidos_del_dia = Pedido.objects.filter(empresa=empresa_del_usuario, fecha__date=hoy, arqueo__isnull=True)
-        retiros_del_dia = Retiro.objects.filter(empresa=empresa_del_usuario, fecha__date=hoy, arqueo__isnull=True)
-
-        total_efectivo = pedidos_del_dia.filter(metodo_pago='Efectivo').aggregate(Sum('total'))['total__sum'] or Decimal('0.00')
-        total_tarjeta = pedidos_del_dia.filter(metodo_pago='Tarjeta').aggregate(Sum('total'))['total__sum'] or Decimal('0.00')
-        total_retiros = retiros_del_dia.aggregate(Sum('monto'))['monto__sum'] or Decimal('0.00')
-
-        efectivo_esperado = total_efectivo - total_retiros
-        diferencia = monto_contado - efectivo_esperado
-
-        arqueo = Arqueo.objects.create(
-            empresa=empresa_del_usuario,
-            fecha=hoy,
-            ventas_efectivo=total_efectivo,
-            ventas_tarjeta=total_tarjeta,
-            retiros=total_retiros,
-            efectivo_esperado=efectivo_esperado,
-            monto_contado=monto_contado,
-            diferencia=diferencia,
-            cerrado_por=request.user 
-        )
-
-        # --- CORRECCIÓN: NO SE BORRA, SE ACTUALIZA ---
-        pedidos_del_dia.update(arqueo=arqueo)
-        retiros_del_dia.update(arqueo=arqueo)
-        
-        messages.success(request, "Caja cerrada exitosamente. Se ha generado un comprobante de cierre.")
-        return redirect('cierre-caja-exitoso', arqueo_id=arqueo.id)
-
-    return redirect('arqueo-caja')
 
 @login_required
 def cierre_caja_exitoso(request, arqueo_id):
@@ -1101,3 +1072,42 @@ def eliminar_cliente(request, cliente_id):
         return redirect('gestion-clientes')
     contexto = {'cliente': cliente}
     return render(request, 'inventario/cliente_confirm_delete.html', contexto)
+
+@login_required
+@transaction.atomic
+def cancelar_pedido(request, pedido_id):
+    empresa_del_usuario = request.user.profile.empresa
+    pedido = get_object_or_404(Pedido, id=pedido_id, empresa=empresa_del_usuario)
+    
+    # Regla 1: No cancelar tickets de un día ya cerrado
+    if pedido.arqueo is not None:
+        messages.error(request, f"El pedido #{pedido.ticket_numero} no puede ser cancelado porque pertenece a un día cuya caja ya fue cerrada.")
+        return redirect('detalle-pedido', pedido_id=pedido.id)
+
+    # Regla 2: No cancelar un ticket que ya está cancelado
+    if pedido.estado == 'Cancelado':
+        messages.warning(request, f"Este pedido ya se encuentra cancelado.")
+        return redirect('detalle-pedido', pedido_id=pedido.id)
+
+    if request.method == 'POST':
+        # 1. Devolver el stock al inventario
+        for item in pedido.items.all():
+            if item.producto.requiere_stock:
+                producto = item.producto
+                producto.stock += item.cantidad
+                producto.save()
+        
+        # 2. Actualizar el estado del pedido
+        pedido.estado = 'Cancelado'
+        pedido.cancelado_por = request.user
+        pedido.fecha_cancelacion = timezone.now()
+        pedido.save()
+        
+        messages.success(request, f"El pedido #{pedido.ticket_numero} ha sido cancelado y el stock ha sido restaurado.")
+        return redirect('reporte-ventas')
+
+    contexto = {
+        'pedido': pedido
+    }
+    # Apuntaremos a una nueva plantilla de confirmación
+    return render(request, 'inventario/pedido_confirm_cancel.html', contexto)

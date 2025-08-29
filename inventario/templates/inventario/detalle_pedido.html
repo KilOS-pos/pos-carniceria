@@ -14,8 +14,23 @@
         <p><strong>Cliente:</strong> {{ pedido.cliente.nombre|default:"Mostrador" }}</p>
         <p><strong>Método de Pago:</strong> {{ pedido.metodo_pago }}</p>
         
-        <button id="btn-reimprimir" class="btn btn-secondary mt-2">Reimprimir Ticket</button>
-        <div id="status-impresion" class="alert mt-2" style="display:none;"></div>
+        <div class="d-flex gap-2 mt-3">
+              <button id="btn-reimprimir" class="btn btn-secondary">Reimprimir Ticket</button>
+
+              {% if not pedido.arqueo and pedido.estado == 'Completado' %}
+                 <a href="{% url 'cancelar-pedido' pedido.id %}" class="btn btn-danger">
+                     <i class="bi bi-x-circle"></i> Cancelar Venta
+                 </a>
+              {% elif pedido.estado == 'Cancelado' %}
+                 <button class="btn btn-outline-warning" disabled>Venta Cancelada</button>
+              {% else %}
+                  <button class="btn btn-outline-secondary" disabled title="Esta venta pertenece a un día cerrado.">
+                     Venta Cerrada
+                  </button>
+              {% endif %}
+        </div>
+
+        <div id="status-impresion" class="alert mt-3" style="display:none;"></div>
     </div>
 </div>
 

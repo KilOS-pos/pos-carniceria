@@ -1,0 +1,23 @@
+{% extends "inventario/base.html" %}
+
+{% block title %}Acción Requerida: Cierre Pendiente{% endblock %}
+
+{% block content %}
+<div class="container text-center d-flex justify-content-center align-items-center" style="height: 70vh;">
+    <div class="col-md-7">
+        
+        <i class="bi bi-lock-fill text-danger" style="font-size: 6rem;"></i>
+        
+        <h1 class="display-5 fw-bold mt-4">Arqueo Pendiente</h1>
+        
+        <p class="lead text-muted mb-5">
+            Para empezar a vender hoy, primero debes realizar el cierre del día anterior.
+        </p>
+        
+        <a href="{% url 'arqueo-caja' %}?fecha={{ dia_pendiente|date:'Y-m-d' }}" class="btn btn-primary btn-lg px-5 py-3">
+            Cerrar Día Pendiente
+        </a>
+        
+    </div>
+</div>
+{% endblock %}

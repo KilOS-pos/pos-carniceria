@@ -11,10 +11,10 @@ class Empresa(models.Model):
         return self.nombre
 
 class Producto(models.Model):
-    # --- NUEVOS CAMPOS ---
     UNIDAD_CHOICES = [
         ('kg', 'Kilogramo (kg)'),
         ('unidad', 'Unidad (u)'),
+        ('servicio', 'Servicio'),
     ]
     
     empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE)
@@ -63,9 +63,17 @@ class Arqueo(models.Model):
         return f"Arqueo del {self.fecha.strftime('%d/%m/%Y')} - {self.empresa.nombre}"
 
 class Pedido(models.Model):
-    # NUEVO CAMPO PARA EL NÚMERO DE TICKET
+    # --- CAMPOS NUEVOS ---
+    ESTADO_CHOICES = [
+        ('Completado', 'Completado'),
+        ('Cancelado', 'Cancelado'),
+    ]
+    estado = models.CharField(max_length=10, choices=ESTADO_CHOICES, default='Completado')
+    cancelado_por = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='pedidos_cancelados')
+    fecha_cancelacion = models.DateTimeField(null=True, blank=True)
+    # --- FIN DE CAMPOS NUEVOS ---
+
     ticket_numero = models.IntegerField(null=True, blank=True)
-    
     empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE)
     METODO_PAGO_CHOICES = [
         ('Efectivo', 'Efectivo'),
@@ -80,9 +88,7 @@ class Pedido(models.Model):
     arqueo = models.ForeignKey(Arqueo, on_delete=models.SET_NULL, null=True, blank=True, related_name='pedidos')
 
     def save(self, *args, **kwargs):
-        # Si el número de ticket no está definido (es un nuevo pedido), lo asignamos
         if not self.ticket_numero:
-            # Buscamos el último pedido de esta empresa
             last_pedido = Pedido.objects.filter(empresa=self.empresa).order_by('-ticket_numero').first()
             if last_pedido and last_pedido.ticket_numero:
                 self.ticket_numero = last_pedido.ticket_numero + 1
@@ -91,7 +97,7 @@ class Pedido(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"Pedido #{self.ticket_numero} del {self.fecha.strftime('%d/%m/%Y')} - Total: ${self.total}"
+        return f"Pedido #{self.ticket_numero} ({self.estado}) - Total: ${self.total}"
 
 
 class PedidoItem(models.Model):

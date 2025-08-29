@@ -37,6 +37,8 @@
         <p class="text-muted">Ingresa el monto de efectivo que tienes en la caja para el cierre del día. Esto reiniciará los totales para el próximo turno.</p>
         <form method="post" action="{% url 'cerrar-caja' %}">
             {% csrf_token %}
+            
+            <input type="hidden" name="fecha_arqueo" value="{{ fecha|date:'Y-m-d' }}">
             <div class="mb-3">
                 <label for="monto_contado" class="form-label">Monto de efectivo en la caja</label>
                 <input type="number" step="0.01" name="monto_contado" id="monto_contado" class="form-control" required>
@@ -46,36 +48,12 @@
     </div>
 </div>
 
+{% comment %} 
+El script original de impresión de arqueo previo no es necesario en esta vista.
+Lo dejamos comentado por si se quisiera reactivar en el futuro.
 <script>
-    document.getElementById('btn-imprimir-arqueo').addEventListener('click', function() {
-        const textoTicket = JSON.parse('{{ texto_arqueo_json|escapejs }}');
-        const urlPuente = '{{ url_puente_impresora }}';
-        
-        const boton = this; // Guardamos una referencia al botón
-
-        // Opcional: Deshabilitar el botón para evitar clics múltiples
-        boton.disabled = true;
-        boton.textContent = 'Imprimiendo...';
-        
-        fetch(urlPuente, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ticket_text: textoTicket })
-        })
-        .then(response => {
-            if (!response.ok) {
-                return Promise.reject('Error de red');
-            }
-            alert('Arqueo enviado a la impresora.');
-        })
-        .catch((error) => {
-            alert('Error: No se pudo conectar con la impresora. Asegúrate de que el "puente_impresora.py" esté en ejecución.');
-        })
-        .finally(() => {
-            // Volver a habilitar el botón
-            boton.disabled = false;
-            boton.textContent = 'Imprimir Arqueo';
-        });
-    });
+    document.getElementById('btn-imprimir-arqueo').addEventListener('click', function() { ... });
 </script>
+{% endcomment %}
+
 {% endblock %}

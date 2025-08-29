@@ -22,6 +22,7 @@ urlpatterns = [
     path('cliente/seleccionar/<int:cliente_id>/', views.seleccionar_cliente, name='seleccionar-cliente'),
     path('cliente/quitar/', views.quitar_cliente, name='quitar-cliente'),
     path('venta/finalizar/<str:metodo_pago>/', views.finalizar_venta, name='finalizar-venta'),
+    path('reportes/pedido/<int:pedido_id>/cancelar/', views.cancelar_pedido, name='cancelar-pedido'),
 
     # Gestión de Inventario
     path('inventario/', views.gestion_inventario, name='gestion-inventario'),

@@ -84,12 +84,23 @@
                         <li class="list-group-item d-flex justify-content-between align-items-center">
                             <div>
                                 <h6 class="mb-0 name">{{ producto.nombre }}</h6>
-                                <small class="text-muted">${{ producto.precio }}/{% if producto.unidad_medida == 'kg' %}Kg{% else %}u.{% endif %}</small>
+                                 <small class="text-muted">
+                                        ${{ producto.precio|floatformat:2 }}
+                                        {% if producto.unidad_medida == 'kg' %}
+                                            /Kg
+                                        {% elif producto.unidad_medida == 'unidad' %}
+                                             /u.
+                                        {% elif producto.unidad_medida == 'servicio' %}
+                                             /Servicio
+                                   {% endif %}
+                                 </small>
                             </div>
                             <button class="btn btn-success btn-sm add-to-cart-btn"
                                   data-product-id="{{ producto.id }}"
                                   data-nombre="{{ producto.nombre }}"
                                   data-precio="{{ producto.precio }}"
+                                  data-precio-mayoreo="{{ producto.precio_mayoreo|default_if_none:'0' }}"
+                                  data-mayoreo-desde-kg="{{ producto.mayoreo_desde_kg|default_if_none:'0' }}"
                                   data-unidad-medida="{{ producto.unidad_medida }}">
                               <i class="bi bi-plus-lg"></i> Añadir
                             </button>
@@ -334,7 +345,7 @@
             </div>
             <div class="modal-body">
                 <h4 id="kgModalProductName" class="mb-3 text-center">Nombre del Producto</h4>
-                <p class="text-center text-muted">Precio: $<span id="kgModalPricePerKg">0.00</span> por Kg</p>
+                <p class="text-center text-muted" id="kgModalPriceInfo">Precio: $0.00 por Kg</p>
                 <div class="form-floating mb-3">
                     <input type="number" class="form-control" id="kgModalWeight" placeholder="0.000" step="0.001" min="0">
                     <label for="kgModalWeight">Kilos (Kg)</label>
@@ -432,39 +443,83 @@ document.addEventListener('DOMContentLoaded', function() {
         if (efectivoModalTotalElement) efectivoModalTotalElement.textContent = modalTotalFormatted;
     }
 
-    // --- LÓGICA DEL MODAL DE KG ---
+    // ===================================================================
+    // --- LÓGICA FINAL Y CORREGIDA PARA EL MODAL DE KG ---
+    // ===================================================================
     const kgModalEl = document.getElementById('kgModal');
     if (kgModalEl) {
         const kgModal = new bootstrap.Modal(kgModalEl);
         const kgModalProductName = document.getElementById('kgModalProductName');
-        const kgModalPricePerKg = document.getElementById('kgModalPricePerKg');
+        const kgModalPriceInfo = document.getElementById('kgModalPriceInfo');
         const kgModalWeightInput = document.getElementById('kgModalWeight');
         const kgModalPriceInput = document.getElementById('kgModalPrice');
         const kgModalAddToCartBtn = document.getElementById('kgModalAddToCartBtn');
+        
         let pricePerKg = 0;
-        let isUpdating = false;
+        let priceMayoreo = 0;
+        let mayoreoDesdeKg = 0;
+        let currentProductId = null;
+        let isInternallyUpdating = false;
 
+        // Función auxiliar que solo actualiza el texto informativo del precio
+        function updatePriceInfo(weight) {
+            let effectivePrice = pricePerKg;
+            if (priceMayoreo > 0 && mayoreoDesdeKg > 0 && weight >= mayoreoDesdeKg) {
+                effectivePrice = priceMayoreo;
+                kgModalPriceInfo.innerHTML = `Precio: $${effectivePrice.toFixed(2)} por Kg <span class="badge bg-info">Mayoreo</span>`;
+            } else {
+                kgModalPriceInfo.innerHTML = `Precio: $${pricePerKg.toFixed(2)} por Kg`;
+            }
+            return effectivePrice;
+        }
+
+        // Evento: cuando el usuario escribe en KILOS (Este campo SÍ actualiza el precio)
         kgModalWeightInput.addEventListener('input', () => {
-            if (isUpdating) return;
-            isUpdating = true;
+            if (isInternallyUpdating) return;
+            
+            if (kgModalWeightInput.value.trim() === '') {
+                isInternallyUpdating = true;
+                kgModalPriceInput.value = '';
+                isInternallyUpdating = false;
+                updatePriceInfo(0);
+                return;
+            }
+
             const weight = parseFloat(kgModalWeightInput.value) || 0;
-            kgModalPriceInput.value = (weight * pricePerKg).toFixed(2);
-            isUpdating = false;
+            const effectivePrice = updatePriceInfo(weight);
+            
+            isInternallyUpdating = true;
+            kgModalPriceInput.value = (weight * effectivePrice).toFixed(2);
+            isInternallyUpdating = false;
         });
 
+        // Evento: cuando el usuario escribe en PRECIO (Este campo SÓLO actualiza los kilos)
         kgModalPriceInput.addEventListener('input', () => {
-            if (isUpdating) return;
-            isUpdating = true;
-            const price = parseFloat(kgModalPriceInput.value) || 0;
-            if (pricePerKg > 0) kgModalWeightInput.value = (price / pricePerKg).toFixed(3);
-            isUpdating = false;
-        });
+            if (isInternallyUpdating) return;
 
+            if (kgModalPriceInput.value.trim() === '') {
+                isInternallyUpdating = true;
+                kgModalWeightInput.value = '';
+                isInternallyUpdating = false;
+                updatePriceInfo(0);
+                return;
+            }
+
+            const price = parseFloat(kgModalPriceInput.value) || 0;
+            const baseWeight = pricePerKg > 0 ? (price / pricePerKg) : 0;
+            
+            isInternallyUpdating = true;
+            kgModalWeightInput.value = baseWeight.toFixed(3);
+            isInternallyUpdating = false;
+            
+            // Actualizamos la información visual (insignia de mayoreo), pero NO el campo de precio.
+            updatePriceInfo(baseWeight);
+        });
+        
         kgModalAddToCartBtn.addEventListener('click', () => {
-            const productId = kgModalEl.dataset.productId;
             const cantidad = kgModalWeightInput.value;
-            if (parseFloat(cantidad) <= 0 || !productId) return;
-            const url = `/carrito/actualizar/${productId}/`;
+            if (parseFloat(cantidad) <= 0 || !currentProductId) return;
+            const url = `/carrito/actualizar/${currentProductId}/`;
             fetch(url, {
                 method: 'POST',
                 headers: { 'X-CSRFToken': csrfToken, 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/json' },
@@ -476,7 +531,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }).catch(console.error);
         });
-        
+
+        kgModalEl.addEventListener('hidden.bs.modal', () => {
+            kgModalWeightInput.value = '';
+            kgModalPriceInput.value = '';
+            currentProductId = null;
+            pricePerKg = 0;
+            priceMayoreo = 0;
+            mayoreoDesdeKg = 0;
+        });
+
         function handleEnterKey(event) {
             if (event.key === 'Enter') {
                 event.preventDefault();
@@ -485,13 +549,17 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         kgModalWeightInput.addEventListener('keydown', handleEnterKey);
         kgModalPriceInput.addEventListener('keydown', handleEnterKey);
-
-        kgModalEl.addEventListener('hidden.bs.modal', () => {
-            kgModalWeightInput.value = '';
-            kgModalPriceInput.value = '';
-            kgModalEl.dataset.productId = '';
-            pricePerKg = 0;
-        });
+        
+        window.openKgModal = function(dataset) {
+            currentProductId = dataset.productId;
+            pricePerKg = parseFloat(dataset.precio) || 0;
+            priceMayoreo = parseFloat(dataset.precioMayoreo) || 0;
+            mayoreoDesdeKg = parseFloat(dataset.mayoreoDesdeKg) || 0;
+            kgModalProductName.textContent = dataset.nombre;
+            kgModalPriceInfo.innerHTML = `Precio: $${pricePerKg.toFixed(2)} por Kg`;
+            kgModal.show();
+            setTimeout(() => kgModalWeightInput.focus(), 500);
+        }
     }
 
     // --- DELEGACIÓN DE EVENTOS PRINCIPAL ---
@@ -501,17 +569,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
         if (addToCartBtn) {
             e.preventDefault();
-            const { productId, unidadMedida, nombre, precio } = addToCartBtn.dataset;
-            if (unidadMedida === 'kg') {
-                pricePerKg = parseFloat(precio);
-                kgModalProductName.textContent = nombre;
-                kgModalPricePerKg.textContent = pricePerKg.toFixed(2);
-                kgModalEl.dataset.productId = productId;
-                const modal = bootstrap.Modal.getInstance(kgModalEl) || new bootstrap.Modal(kgModalEl);
-                modal.show();
-                setTimeout(() => kgModalWeightInput.focus(), 500);
+            if (addToCartBtn.dataset.unidadMedida === 'kg') {
+                window.openKgModal(addToCartBtn.dataset);
             } else {
-                const url = `/carrito/agregar/${productId}/`;
+                const url = `/carrito/agregar/${addToCartBtn.dataset.productId}/`;
                 fetch(url, { method: 'POST', headers: { 'X-CSRFToken': csrfToken, 'X-Requested-With': 'XMLHttpRequest' }})
                 .then(res => res.json()).then(updateCartUI).catch(console.error);
             }
@@ -540,12 +601,11 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         cartItemsContainer.addEventListener('submit', e => e.preventDefault());
     }
-
-    // --- LÓGICA DEL BOTÓN DE ESTADO DE LA IMPRESORA (MÉTODO ROBUSTO) ---
+    
+    // --- LÓGICA DEL BOTÓN DE ESTADO DE LA IMPRESORA ---
     const btnImprimirStatus = document.getElementById('btn-imprimir-status');
     if(btnImprimirStatus) {
         const printerStatusText = document.getElementById('printer-status-text');
-        // APUNTAMOS A LA NUEVA RUTA /STATUS
         const statusUrl = "http://127.0.0.1:5000/status";
 
         const checkPrinterStatus = async () => {
@@ -584,6 +644,97 @@ document.addEventListener('DOMContentLoaded', function() {
             button.addEventListener('click', () => amountInput.value = button.dataset.value);
         });
     }
+
+    const efectivoModal = document.getElementById('efectivoModal');
+    if (efectivoModal) {
+        efectivoModal.addEventListener('show.bs.modal', function (event) {
+            const totalCarritoElement = document.getElementById('total-carrito');
+            const totalValue = parseFloat(totalCarritoElement.textContent.replace('$', ''));
+            const montoRecibidoInput = document.getElementById('monto_recibido');
+            if (!isNaN(totalValue)) {
+                montoRecibidoInput.value = totalValue.toFixed(2);
+                setTimeout(() => montoRecibidoInput.select(), 50); 
+            }
+        });
+    }
+
+    // --- LÓGICA PARA FINALIZAR VENTA SIN RECARGAR LA PÁGINA ---
+    const formEfectivo = document.getElementById('form-efectivo');
+    const btnSubmitTarjeta = document.getElementById('submit-tarjeta');
+    const posMainView = document.getElementById('pos-main-view');
+    const successView = document.getElementById('success-view');
+
+    async function handleFinalizeSale(metodoPago, formData) {
+        const url = `/venta/finalizar/${metodoPago}/`;
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrfToken, 'X-Requested-With': 'XMLHttpRequest' },
+                body: formData
+            });
+            const data = await response.json();
+            if (data.success) {
+                bootstrap.Modal.getInstance(document.getElementById('efectivoModal'))?.hide();
+                bootstrap.Modal.getInstance(document.getElementById('tarjetaModal'))?.hide();
+                showSuccessScreen(data);
+                imprimirTicket(data.texto_ticket);
+            } else {
+                alert(`Error: ${data.message}`);
+            }
+        } catch (error) {
+            alert('Error de conexión al finalizar la venta.');
+            console.error(error);
+        }
+    }
+
+    function showSuccessScreen(data) {
+        posMainView.style.display = 'none';
+        successView.style.display = 'block';
+        document.getElementById('success-ticket-number').textContent = data.ticket_numero;
+        const changeAlert = document.getElementById('success-change-alert');
+        if (data.metodo_pago === 'Efectivo' && parseFloat(data.cambio_entregado) > 0) {
+            document.getElementById('success-change-amount').textContent = data.cambio_entregado;
+            changeAlert.style.display = 'block';
+        } else {
+            changeAlert.style.display = 'none';
+        }
+    }
+    
+    function imprimirTicket(textoTicket) {
+        const statusDiv = document.getElementById('status-impresion');
+        const urlPuente = 'http://127.0.0.1:5000/print';
+        statusDiv.className = 'alert alert-info mt-4';
+        statusDiv.textContent = 'Enviando ticket a la impresora...';
+        fetch(urlPuente, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ticket_text: textoTicket })
+        })
+        .then(response => {
+            if (!response.ok) throw new Error('Error de red');
+            statusDiv.className = 'alert alert-success mt-4';
+            statusDiv.textContent = '✅ Ticket enviado a la impresora.';
+        })
+        .catch(() => {
+            statusDiv.className = 'alert alert-danger mt-4';
+            statusDiv.textContent = '❌ Error al conectar con la impresora.';
+        });
+    }
+
+    formEfectivo.addEventListener('submit', function(e) {
+        e.preventDefault();
+        const formData = new FormData(formEfectivo);
+        handleFinalizeSale('Efectivo', formData);
+    });
+
+    btnSubmitTarjeta.addEventListener('click', function(e) {
+        e.preventDefault();
+        handleFinalizeSale('Tarjeta', new FormData());
+    });
+
+    document.getElementById('btn-new-sale').addEventListener('click', () => {
+        window.location.reload();
+    });
 });
 </script>
 

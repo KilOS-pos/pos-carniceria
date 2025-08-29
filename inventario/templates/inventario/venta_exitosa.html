@@ -1,6 +1,6 @@
 {% extends "inventario/base.html" %}
 
-{% block title %}Venta #{{ pedido.id }} Exitosa{% endblock %}
+{% block title %}Venta #{{ pedido.ticket_numero }} Exitosa{% endblock %}
 
 {% block content %}
 <div class="container text-center">
@@ -11,10 +11,10 @@
             <p class="lead">La venta #{{ pedido.ticket_numero }} ha sido registrada correctamente.</p>
 
             {% if pedido.metodo_pago == 'Efectivo' and pedido.cambio_entregado >= 0 %}
-            <div class="alert alert-info mt-4">
+            <div class="alert alert-info mt-4 text-center">
                 <h2 class="alert-heading">Cambio a entregar:</h2>
-                <p class="lead">La venta #{{ pedido.ticket_numero }} ha sido registrada correctamente.</p>
-            </div>
+                <p class="display-4 fw-bold">$ {{ pedido.cambio_entregado|floatformat:2 }}</p>
+                </div>
             {% endif %}
             
             <div id="status-impresion" class="alert alert-info mt-4">
@@ -24,14 +24,14 @@
             <hr class="my-4">
 
             <div class="d-grid gap-2">
-                <button id="btn-reimprimir" class="btn btn-warning btn-lg mb-2">
-                    <i class="bi bi-printer me-2"></i>Reimprimir Ticket
-                </button>
-                <a href="{% url 'detalle-pedido' pedido.id %}" class="btn btn-secondary btn-lg mb-2">
-                    <i class="bi bi-list-ul me-2"></i>Ver Detalle del Pedido
-                </a>
                 <a href="{% url 'pos' 'domicilio' %}" class="btn btn-success btn-lg">
                     Realizar Nueva Venta
+                </a>
+                <button id="btn-reimprimir" class="btn btn-secondary btn-lg mb-2">
+                    <i class="bi bi-printer me-2"></i>Reimprimir Ticket
+                </button>
+                <a href="{% url 'detalle-pedido' pedido.id %}" class="btn btn-outline-secondary btn-lg mb-2">
+                    <i class="bi bi-list-ul me-2"></i>Ver Detalle del Pedido
                 </a>
             </div>
         </div>
@@ -39,49 +39,38 @@
 </div>
 
 <script>
-    // Lógica para enviar el ticket a la impresora al cargar la página.
     document.addEventListener("DOMContentLoaded", function() {
         const textoTicket = JSON.parse('{{ texto_del_ticket_json|escapejs }}');
         const statusDiv = document.getElementById('status-impresion');
         const urlPuente = '{{ url_puente_impresora }}';
 
-        // Función para enviar el ticket a la impresora
         function imprimirTicket(ticketData) {
             statusDiv.className = 'alert alert-info mt-4';
             statusDiv.textContent = 'Enviando ticket a la impresora...';
             
             fetch(urlPuente, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ ticket_text: ticketData, commands: ['cut'] })
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ticket_text: ticketData })
             })
             .then(response => {
-                if (response.ok) {
-                    return response.json();
-                }
-                throw new Error('La respuesta de la red no fue exitosa.');
+                if (!response.ok) throw new Error('Error de red');
+                return response.json();
             })
             .then(data => {
-                console.log('Respuesta del puente:', data);
                 statusDiv.className = 'alert alert-success mt-4';
-                statusDiv.textContent = '✅ Ticket enviado a la impresora con éxito.';
+                statusDiv.textContent = '✅ Ticket enviado a la impresora.';
             })
             .catch((error) => {
-                console.error('Error:', error);
                 statusDiv.className = 'alert alert-danger mt-4';
-                statusDiv.textContent = '❌ Error: No se pudo conectar con la impresora. Asegúrate de que el Complemento de la impresora esté instalado en esta computadora.';
+                statusDiv.textContent = '❌ Error: No se pudo conectar con la impresora.';
             });
         }
 
-        // Imprimir el ticket automáticamente al cargar la página
         imprimirTicket(textoTicket);
 
-        // Lógica para el botón de reimprimir
         const btnReimprimir = document.getElementById('btn-reimprimir');
         btnReimprimir.addEventListener('click', function() {
-            // El mismo texto del ticket ya está disponible
             imprimirTicket(textoTicket);
         });
     });
