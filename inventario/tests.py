@@ -60,6 +60,7 @@ class InventarioTestCase(TestCase):
         # Actualizar stock (simulando la lógica de la vista)
         self.producto1.stock -= Decimal('2.000')
         self.producto1.save()
+#
 
         # Refrescar el objeto desde la base de datos
         self.producto1.refresh_from_db()
@@ -68,3 +69,4 @@ class InventarioTestCase(TestCase):
         self.assertEqual(pedido.items.count(), 1)
         self.assertEqual(pedido.total, Decimal('500.00'))
         self.assertEqual(self.producto1.stock, stock_inicial - Decimal('2.000'))
+
